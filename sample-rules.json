@@ -1,0 +1,20 @@
+[
+  {
+    "id": "rule-profile-001",
+    "enabled": true,
+    "name": "改写用户信息接口",
+    "match": {
+      "method": "GET",
+      "url": "/api/user/profile"
+    },
+    "rewrite": {
+      "body": "{\n  \"nickname\": \"mocked-by-extension\"\n}"
+    },
+    "stats": {
+      "hitCount": 0,
+      "lastMatchedAt": "",
+      "lastMatchedUrl": "",
+      "lastResourceType": ""
+    }
+  }
+]

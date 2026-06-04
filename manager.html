@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>XHR Interceptor Manager</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="app app-manager">
+      <header class="page-header">
+        <div>
+          <h1 data-i18n="appTitle">XHR / Fetch 拦截器</h1>
+          <p class="hint" data-i18n="appHint">配置规则精确匹配请求 URL（忽略查询参数），命中后直接替换整个响应体。命中次数实时记录，右侧日志可查看每一次拦截的原始与改写内容。</p>
+        </div>
+        <label class="locale-switcher">
+          <span data-i18n="language">语言</span>
+          <select id="localeSelect">
+            <option value="zh-CN">中文</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+          </select>
+        </label>
+      </header>
+
+      <section class="manager-layout">
+        <!-- Left: Rules -->
+        <section class="panel manager-rules">
+          <div class="panel-bar">
+            <h2 data-i18n="rulesTitle">规则列表</h2>
+            <button id="addRuleButton" type="button" class="primary" data-i18n="addRule">+ 新增</button>
+          </div>
+          <div class="list-head">
+            <span data-i18n="rule">规则</span>
+            <span data-i18n="method">方法</span>
+            <span>URL</span>
+            <span data-i18n="hits">命中</span>
+            <span data-i18n="status">状态</span>
+            <span data-i18n="actions">操作</span>
+          </div>
+          <div id="ruleList" class="rule-list"></div>
+          <div class="pagination" id="rulePagination">
+            <button id="rulePrevPageButton" type="button" data-i18n="prevPage">上一页</button>
+            <span id="rulePageInfo" class="page-info"></span>
+            <button id="ruleNextPageButton" type="button" data-i18n="nextPage">下一页</button>
+          </div>
+        </section>
+
+        <!-- Right: Logs -->
+        <section class="panel manager-logs">
+          <div class="panel-bar">
+            <h2 data-i18n="logsTitle">拦截日志</h2>
+            <button id="clearLogsButton" type="button" class="danger" style="padding:4px 10px;font-size:11px;display:none;" data-i18n="clear">清空</button>
+          </div>
+          <div class="log-head">
+            <span data-i18n="time">时间</span>
+            <span data-i18n="rule">规则</span>
+            <span data-i18n="method">方法</span>
+            <span data-i18n="endpoint">接口</span>
+          </div>
+          <div id="logList" class="log-list"></div>
+          <div class="pagination" id="logPagination">
+            <button id="logPrevPageButton" type="button" title="上一页" data-i18n-title="prevPage">&lt;</button>
+            <span id="logPageInfo" class="page-info"></span>
+            <button id="logNextPageButton" type="button" title="下一页" data-i18n-title="nextPage">&gt;</button>
+          </div>
+        </section>
+      </section>
+
+      <div id="status"></div>
+    </main>
+
+    <!-- Rule Edit Modal -->
+    <div id="ruleModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop"></div>
+      <section class="modal-card modal-resizable">
+        <div class="modal-header">
+          <div>
+            <h2 id="ruleModalTitle">新增规则</h2>
+            <p class="panel-note" data-i18n="ruleModalNote">只配置请求方法、URL 和返回内容。</p>
+          </div>
+          <button id="closeRuleModalButton" type="button" class="icon-button" aria-label="关闭" data-i18n-aria-label="close">&times;</button>
+        </div>
+
+        <form id="ruleForm" class="rule-form">
+          <div class="form-grid">
+            <label class="field field-name">
+              <span data-i18n="ruleName">规则名称</span>
+              <input id="ruleName" name="ruleName" type="text" maxlength="60" placeholder="例如：改写用户信息" data-i18n-placeholder="ruleNamePlaceholder">
+            </label>
+
+            <label class="field field-method">
+              <span data-i18n="requestMethod">请求方法</span>
+              <select id="matchMethod">
+                <option value="" data-i18n="all">全部</option>
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+                <option value="PUT">PUT</option>
+                <option value="PATCH">PATCH</option>
+                <option value="DELETE">DELETE</option>
+              </select>
+            </label>
+
+            <label class="field field-switch">
+              <span data-i18n="enabled">启用</span>
+              <label class="switch">
+                <input id="ruleEnabled" name="ruleEnabled" type="checkbox" checked>
+                <span class="switch-slider"></span>
+              </label>
+            </label>
+          </div>
+
+          <label class="field">
+            <span data-i18n="urlMatch">URL 匹配（精确匹配路径，忽略 ? 参数）</span>
+            <input id="urlMatchValue" type="text" placeholder="https://example.com/api/user/profile">
+          </label>
+          <label class="field">
+            <span data-i18n="responseBody">返回内容</span>
+            <div class="textarea-action-wrap">
+              <textarea id="rewriteBody" placeholder="输入命中后直接返回的 JSON 响应内容" spellcheck="false" data-i18n-placeholder="responseBodyPlaceholder"></textarea>
+              <button id="formatRewriteBodyButton" type="button" class="textarea-action-button" data-i18n="format">格式化</button>
+            </div>
+          </label>
+
+          <div class="form-actions">
+            <button id="saveButton" type="submit" class="primary" data-i18n="save">保存</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <!-- Delete Confirm Modal -->
+    <div id="deleteModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-close-modal="delete"></div>
+      <section class="modal-card modal-card-small modal-resizable">
+        <div class="modal-header">
+          <div>
+            <h2 data-i18n="deleteRule">删除规则</h2>
+            <p class="panel-note" data-i18n="deleteRuleNote">删除后不可恢复。</p>
+          </div>
+          <button id="closeDeleteModalButton" type="button" class="icon-button" aria-label="关闭" data-i18n-aria-label="close">&times;</button>
+        </div>
+        <p id="deleteModalText" class="delete-copy" data-i18n="deleteRuleConfirm">确定删除这条规则吗？</p>
+        <div class="form-actions">
+          <button id="cancelDeleteButton" type="button" data-i18n="cancel">取消</button>
+          <button id="confirmDeleteButton" type="button" class="danger" data-i18n="confirmDelete">确认删除</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- Log Detail Modal -->
+    <div id="logModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-close-modal="log"></div>
+      <section class="modal-card log-detail-modal modal-resizable">
+        <div class="modal-header">
+          <div>
+            <h2 data-i18n="logDetail">拦截详情</h2>
+            <div class="log-meta-bar" id="logMetaBar"></div>
+          </div>
+          <button id="closeLogModalButton" type="button" class="icon-button" aria-label="关闭" data-i18n-aria-label="close">&times;</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- Hits Modal -->
+    <div id="hitsModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-close-modal="hits"></div>
+      <section class="modal-card hits-modal modal-resizable">
+        <div class="modal-header">
+          <div>
+            <h2 id="hitsModalTitle" data-i18n="hitRecords">命中记录</h2>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button id="resetHitsStatsButton" type="button" class="danger" style="padding:6px 12px;font-size:12px;" data-i18n="clearStats">清空统计</button>
+            <button id="closeHitsModalButton" type="button" class="icon-button" aria-label="关闭" data-i18n-aria-label="close">&times;</button>
+          </div>
+        </div>
+        <div id="hitsList" class="hits-list"></div>
+      </section>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

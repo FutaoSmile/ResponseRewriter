@@ -1,0 +1,456 @@
+(function () {
+  const EXTENSION_SOURCE = "xhr-interceptor-extension";
+  const PAGE_SOURCE = "xhr-interceptor-page";
+  const TOAST_I18N = {
+    "zh-CN": {
+      open: "打开 XHR Interceptor",
+      rewritten: "XHR Interceptor · 响应已改写 · "
+    },
+    en: {
+      open: "Open XHR Interceptor",
+      rewritten: "XHR Interceptor · Response rewritten · "
+    },
+    ja: {
+      open: "XHR Interceptor を開く",
+      rewritten: "XHR Interceptor · レスポンスを書き換えました · "
+    },
+    ko: {
+      open: "XHR Interceptor 열기",
+      rewritten: "XHR Interceptor · 응답이 수정됨 · "
+    }
+  };
+  let activeRules = [];
+
+  function getToastLocale() {
+    var lang = String(navigator.language || "").toLowerCase();
+    if (lang.indexOf("ja") === 0) return "ja";
+    if (lang.indexOf("ko") === 0) return "ko";
+    if (lang.indexOf("en") === 0) return "en";
+    return "zh-CN";
+  }
+
+  function toastText(key) {
+    var locale = getToastLocale();
+    return (TOAST_I18N[locale] && TOAST_I18N[locale][key]) || TOAST_I18N["zh-CN"][key];
+  }
+
+  function matchesMethod(actual, expected) {
+    if (!expected) {
+      return true;
+    }
+    return String(actual || "").toUpperCase() === String(expected).toUpperCase();
+  }
+
+  function matchesUrl(actual, expected) {
+    if (!expected) {
+      return false;
+    }
+
+    var actualText = String(actual || "").trim();
+    var expectedText = String(expected || "").trim();
+    var actualUrl = parseUrl(actualText);
+    var expectedUrl = parseUrl(expectedText);
+
+    if (actualUrl && expectedUrl) {
+      if (expectedText.charAt(0) === "/") {
+        return normalizePath(actualUrl.pathname) === normalizePath(expectedUrl.pathname);
+      }
+
+      return actualUrl.origin === expectedUrl.origin &&
+        normalizePath(actualUrl.pathname) === normalizePath(expectedUrl.pathname);
+    }
+
+    return stripUrlSuffix(actualText) === stripUrlSuffix(expectedText);
+  }
+
+  function normalizePath(pathname) {
+    var value = String(pathname || "/");
+    if (value.length > 1 && value.endsWith("/")) {
+      return value.slice(0, -1);
+    }
+    return value;
+  }
+
+  function parseUrl(value) {
+    try {
+      return new URL(value, window.location.href);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function stripUrlSuffix(value) {
+    return String(value || "").replace(/[?#].*$/, "");
+  }
+
+  function ruleApplies(rule, context) {
+    if (!rule || rule.enabled === false) {
+      return false;
+    }
+
+    return matchesMethod(context.method, rule.match && rule.match.method) &&
+      matchesUrl(context.url, rule.match && rule.match.url);
+  }
+
+  function applyRewrite(rule, originalText) {
+    const body = rule && rule.rewrite ? rule.rewrite.body : "";
+    return typeof body === "string" ? body : originalText;
+  }
+
+  function hasMatchableRules() {
+    return activeRules.some(function (rule) {
+      return rule && rule.enabled !== false && rule.match && rule.match.url;
+    });
+  }
+
+  function getFetchContext(input, init) {
+    var method = init && init.method ? init.method : "";
+    var url = "";
+
+    if (input && typeof input === "object" && typeof input.url === "string") {
+      method = method || input.method || "GET";
+      url = input.url || "";
+    } else {
+      method = method || "GET";
+      url = String(input || "");
+      try {
+        url = new URL(url, window.location.href).href;
+      } catch (e) {
+        // Keep the original value if URL parsing fails.
+      }
+    }
+
+    return {
+      method: method,
+      url: url
+    };
+  }
+
+  function rewriteText(context) {
+    let currentText = context.responseText;
+    const matchedRules = [];
+
+    for (const rule of activeRules) {
+      const nextContext = Object.assign({}, context, { responseText: currentText });
+      if (!ruleApplies(rule, nextContext)) {
+        continue;
+      }
+
+      matchedRules.push(rule);
+      currentText = applyRewrite(rule, currentText);
+    }
+
+    return { text: currentText, matchedRules };
+  }
+
+  function getToastMount() {
+    return document.body || document.documentElement;
+  }
+
+  function openManager() {
+    window.postMessage(
+      {
+        source: PAGE_SOURCE,
+        type: "OPEN_MANAGER"
+      },
+      "*"
+    );
+  }
+
+  function getToastContainer(mount) {
+    var container = document.getElementById("__xhr_interceptor_rewrite_toasts__");
+    if (container) return container;
+
+    container = document.createElement("div");
+    container.id = "__xhr_interceptor_rewrite_toasts__";
+    container.style.cssText = [
+      "position:fixed",
+      "right:16px",
+      "top:32px",
+      "z-index:2147483647",
+      "display:flex",
+      "flex-direction:column",
+      "align-items:flex-end",
+      "gap:8px",
+      "max-width:420px",
+      "pointer-events:none"
+    ].join(";");
+    mount.appendChild(container);
+    return container;
+  }
+
+  function createToastItem() {
+    var toast = document.createElement("div");
+    toast.style.cssText = [
+      "max-width:420px",
+      "padding:10px 14px",
+      "border-radius:8px",
+      "border:1px solid rgba(21,128,61,0.26)",
+      "background:linear-gradient(135deg,rgba(240,253,244,0.97),rgba(220,252,231,0.97))",
+      "color:#14532d",
+      "box-shadow:0 8px 24px rgba(21,128,61,0.16)",
+      "font:12px/1.45 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif",
+      "pointer-events:auto",
+      "cursor:pointer",
+      "display:flex",
+      "align-items:center",
+      "gap:8px",
+      "white-space:nowrap",
+      "overflow:hidden",
+      "transition:opacity 160ms ease,transform 160ms ease"
+    ].join(";");
+
+    var text = document.createElement("span");
+    text.style.cssText = "overflow:hidden;text-overflow:ellipsis;";
+    var count = document.createElement("span");
+    count.style.cssText = [
+      "display:none",
+      "flex:0 0 auto",
+      "min-width:24px",
+      "padding:1px 7px",
+      "border-radius:999px",
+      "background:rgba(21,128,61,0.14)",
+      "color:#166534",
+      "font-weight:700",
+      "text-align:center"
+    ].join(";");
+
+    toast.__xhrInterceptorText = text;
+    toast.__xhrInterceptorCount = count;
+    toast.appendChild(text);
+    toast.appendChild(count);
+    toast.title = toastText("open");
+    toast.addEventListener("click", openManager);
+    return toast;
+  }
+
+  function showRewriteToast(rule, context) {
+    var mount = getToastMount();
+    if (!mount) return;
+
+    var url = parseUrl(context.url);
+    var target = url ? url.pathname : stripUrlSuffix(context.url);
+    var method = context.method || "GET";
+    var key = method + " " + target;
+    var container = getToastContainer(mount);
+    var toast = null;
+
+    Array.prototype.some.call(container.children, function (item) {
+      if (item.dataset && item.dataset.rewriteKey === key) {
+        toast = item;
+        return true;
+      }
+
+      return false;
+    });
+
+    if (!toast) {
+      toast = createToastItem();
+      toast.dataset.rewriteKey = key;
+      toast.__xhrInterceptorHitCount = 0;
+      container.insertBefore(toast, container.firstChild);
+    }
+
+    toast.__xhrInterceptorHitCount += 1;
+    toast.__xhrInterceptorText.textContent = toastText("rewritten") + key;
+    if (toast.__xhrInterceptorHitCount > 1) {
+      toast.__xhrInterceptorCount.style.display = "inline-block";
+      toast.__xhrInterceptorCount.textContent = "x" + toast.__xhrInterceptorHitCount;
+    }
+    toast.style.opacity = "1";
+    toast.style.transform = "translateY(0)";
+
+    clearTimeout(toast.__xhrInterceptorTimer);
+    toast.__xhrInterceptorTimer = setTimeout(function () {
+      toast.style.opacity = "0";
+      toast.style.transform = "translateY(-4px)";
+      setTimeout(function () {
+        if (toast.parentNode && toast.style.opacity === "0") {
+          toast.parentNode.removeChild(toast);
+        }
+      }, 200);
+    }, 3500);
+  }
+
+  function emitRuleHit(rule, context) {
+    showRewriteToast(rule, context);
+
+    window.postMessage(
+      {
+        source: PAGE_SOURCE,
+        type: "RULE_HIT",
+        ruleId: rule.id,
+        ruleName: rule.name || "",
+        matchedAt: new Date().toISOString(),
+        url: context.url,
+        method: context.method,
+        resourceType: context.resourceType,
+        originalResponse: context.originalResponse,
+        rewrittenResponse: context.rewrittenResponse
+      },
+      "*"
+    );
+  }
+
+  function patchXhr() {
+    const nativeOpen = XMLHttpRequest.prototype.open;
+    const nativeSend = XMLHttpRequest.prototype.send;
+
+    XMLHttpRequest.prototype.open = function (method, url) {
+      this.__interceptor = {
+        method: method || "GET",
+        url: url
+      };
+      return nativeOpen.apply(this, arguments);
+    };
+
+    XMLHttpRequest.prototype.send = function () {
+      if (!this.__interceptorBound) {
+        this.__interceptorBound = true;
+
+        // Only attach the listener if any enabled rule could match
+        const couldMatch = activeRules.some(function (rule) {
+          return ruleApplies(rule, {
+            method: this.__interceptor.method,
+            url: this.__interceptor.url,
+            responseText: ""
+          });
+        }, this);
+
+        if (couldMatch) {
+          this.addEventListener("readystatechange", function () {
+            if (this.readyState !== 4 || !this.__interceptor) {
+              return;
+            }
+
+            if (this.responseType !== "" && this.responseType !== "text") {
+              return;
+            }
+
+            if (typeof this.responseText !== "string") {
+              return;
+            }
+
+            const result = rewriteText({
+              resourceType: "xhr",
+              method: this.__interceptor.method,
+              url: String(this.responseURL || this.__interceptor.url || ""),
+              responseText: this.responseText
+            });
+
+            if (result.text === this.responseText) {
+              return;
+            }
+
+            result.matchedRules.forEach(function (rule) {
+              emitRuleHit(rule, {
+                resourceType: "xhr",
+                method: this.__interceptor.method,
+                url: String(this.responseURL || this.__interceptor.url || ""),
+                originalResponse: this.responseText,
+                rewrittenResponse: result.text
+              });
+            }, this);
+
+            Object.defineProperty(this, "responseText", {
+              configurable: true,
+              value: result.text
+            });
+            Object.defineProperty(this, "response", {
+              configurable: true,
+              value: result.text
+            });
+          });
+        }
+      }
+
+      return nativeSend.apply(this, arguments);
+    };
+  }
+
+  function patchFetch() {
+    const nativeFetch = window.fetch;
+
+    window.fetch = function (input, init) {
+      if (!hasMatchableRules()) {
+        return nativeFetch.apply(this, arguments);
+      }
+
+      const requestContext = getFetchContext(input, init);
+
+      // Check if any enabled rule could match — if not, use native fetch to preserve streaming
+      const couldMatch = activeRules.some(function (rule) {
+        return ruleApplies(rule, {
+          method: requestContext.method,
+          url: requestContext.url,
+          responseText: ""
+        });
+      });
+
+      if (!couldMatch) {
+        return nativeFetch.apply(this, arguments);
+      }
+
+      // At least one rule matches — await full response so we can rewrite it
+      return nativeFetch.apply(this, arguments).then(async function (response) {
+        let originalText = "";
+        try {
+          originalText = await response.clone().text();
+        } catch (e) {
+          return response;
+        }
+
+        const result = rewriteText({
+          resourceType: "fetch",
+          method: requestContext.method,
+          url: requestContext.url,
+          responseText: originalText
+        });
+
+        if (result.text === originalText) {
+          return response;
+        }
+
+        result.matchedRules.forEach(function (rule) {
+          emitRuleHit(rule, {
+            resourceType: "fetch",
+            method: requestContext.method,
+            url: response.url || requestContext.url,
+            originalResponse: originalText,
+            rewrittenResponse: result.text
+          });
+        });
+
+        const headers = new Headers(response.headers);
+        headers.delete("content-length");
+
+        return new Response(result.text, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: headers
+        });
+      });
+    };
+  }
+
+  window.addEventListener("message", function (event) {
+    if (event.source !== window || !event.data || event.data.source !== EXTENSION_SOURCE) {
+      return;
+    }
+
+    if (event.data.type === "SET_RULES") {
+      activeRules = Array.isArray(event.data.rules) ? event.data.rules : [];
+    }
+  });
+
+  patchXhr();
+  patchFetch();
+
+  window.postMessage(
+    {
+      source: PAGE_SOURCE,
+      type: "REQUEST_RULES"
+    },
+    "*"
+  );
+})();
