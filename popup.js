@@ -2,10 +2,15 @@ const RULES_PAGE_SIZE = 10;
 const LOGS_PAGE_SIZE = 10;
 const DEFAULT_LOCALE = "zh-CN";
 const LOCALE_STORAGE_KEY = "locale";
+const DEFAULT_THEME = "light";
+const THEME_STORAGE_KEY = "theme";
 const I18N = {
   "zh-CN": {
     appTitle: "XHR / Fetch 拦截器",
     appHint: "配置规则精确匹配请求 URL（忽略查询参数），命中后直接替换整个响应体。命中次数实时记录，右侧日志可查看每一次拦截的原始与改写内容。",
+    theme: "主题",
+    themeLight: "浅色",
+    themeDark: "暗黑",
     language: "语言",
     rulesTitle: "规则列表",
     addRule: "+ 新增",
@@ -81,6 +86,9 @@ const I18N = {
   en: {
     appTitle: "XHR / Fetch Interceptor",
     appHint: "Configure rules to match request URLs exactly, ignoring query parameters. When a rule hits, the whole response body is replaced and every hit is logged.",
+    theme: "Theme",
+    themeLight: "Light",
+    themeDark: "Dark",
     language: "Language",
     rulesTitle: "Rules",
     addRule: "+ Add",
@@ -156,6 +164,9 @@ const I18N = {
   ja: {
     appTitle: "XHR / Fetch インターセプター",
     appHint: "リクエスト URL を正確に照合し、クエリパラメータを無視します。命中時はレスポンス本文全体を置き換え、各命中を記録します。",
+    theme: "テーマ",
+    themeLight: "ライト",
+    themeDark: "ダーク",
     language: "言語",
     rulesTitle: "ルール一覧",
     addRule: "+ 追加",
@@ -231,6 +242,9 @@ const I18N = {
   ko: {
     appTitle: "XHR / Fetch 인터셉터",
     appHint: "요청 URL을 정확히 매칭하고 쿼리 파라미터는 무시합니다. 명중하면 전체 응답 본문을 교체하고 모든 명중 기록을 저장합니다.",
+    theme: "테마",
+    themeLight: "라이트",
+    themeDark: "다크",
     language: "언어",
     rulesTitle: "규칙 목록",
     addRule: "+ 추가",
@@ -347,10 +361,12 @@ const elements = {
   resetHitsStatsButton: document.getElementById("resetHitsStatsButton"),
   loadExampleButton: document.getElementById("loadExampleButton"),
   clearLogsButton: document.getElementById("clearLogsButton"),
-  localeSelect: document.getElementById("localeSelect")
+  localeSelect: document.getElementById("localeSelect"),
+  themeSelect: document.getElementById("themeSelect")
 };
 
 let currentLocale = DEFAULT_LOCALE;
+let currentTheme = DEFAULT_THEME;
 let rules = [];
 let editingRuleId = "";
 let deleteRuleId = "";
@@ -387,6 +403,18 @@ function normalizeLocale(value) {
   if (lang.indexOf("ko") === 0) return "ko";
   if (lang.indexOf("en") === 0) return "en";
   return "zh-CN";
+}
+
+function normalizeTheme(value) {
+  return value === "dark" ? "dark" : "light";
+}
+
+function applyTheme() {
+  document.documentElement.dataset.theme = currentTheme;
+
+  if (elements.themeSelect) {
+    elements.themeSelect.value = currentTheme;
+  }
 }
 
 function applyLocale() {
@@ -1095,6 +1123,13 @@ if (elements.localeSelect) {
   });
 }
 
+if (elements.themeSelect) {
+  elements.themeSelect.addEventListener("change", function () {
+    currentTheme = normalizeTheme(elements.themeSelect.value);
+    chrome.storage.local.set({ [THEME_STORAGE_KEY]: currentTheme }, applyTheme);
+  });
+}
+
 // Rule list delegation
 elements.ruleList.addEventListener("click", function (event) {
   var button = event.target.closest("[data-action]");
@@ -1348,8 +1383,13 @@ if (window.MutationObserver) {
    Bootstrap
    ================================================================ */
 
-chrome.storage.local.get({ [LOCALE_STORAGE_KEY]: normalizeLocale(navigator.language) }, function (result) {
+chrome.storage.local.get({
+  [LOCALE_STORAGE_KEY]: normalizeLocale(navigator.language),
+  [THEME_STORAGE_KEY]: DEFAULT_THEME
+}, function (result) {
   currentLocale = I18N[result[LOCALE_STORAGE_KEY]] ? result[LOCALE_STORAGE_KEY] : DEFAULT_LOCALE;
+  currentTheme = normalizeTheme(result[THEME_STORAGE_KEY]);
+  applyTheme();
   applyLocale();
   loadRules();
 });
