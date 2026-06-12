@@ -38,7 +38,12 @@
         <section class="panel manager-rules">
           <div class="panel-bar">
             <h2 data-i18n="rulesTitle">规则列表</h2>
-            <button id="addRuleButton" type="button" class="primary" data-i18n="addRule">+ 新增</button>
+            <div class="panel-actions">
+              <input id="importRulesFile" type="file" accept="application/json,.json" hidden>
+              <button id="importRulesButton" type="button" data-i18n="importRules">导入</button>
+              <button id="exportRulesButton" type="button" data-i18n="exportRules">导出</button>
+              <button id="addRuleButton" type="button" class="primary" data-i18n="addRule">+ 新增</button>
+            </div>
           </div>
           <div class="list-head">
             <span data-i18n="rule">规则</span>

@@ -346,6 +346,13 @@ html[data-theme="dark"] body::before {
   flex-wrap: wrap;
 }
 
+.panel-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 /* ----- Typography ----- */
 h1 {
   margin: 0;
@@ -464,7 +471,7 @@ h2 {
 /* ----- Rule Item ----- */
 .rule-item {
   display: grid;
-  grid-template-columns: 1.3fr 110px 1.8fr 90px 90px 130px;
+  grid-template-columns: 1.3fr 110px 1.8fr 90px 90px 190px;
   gap: 12px;
   align-items: center;
   border-radius: var(--radius-md);
@@ -604,7 +611,7 @@ h2 {
 /* ----- List Headers (Manager) ----- */
 .list-head {
   display: grid;
-  grid-template-columns: 1.3fr 110px 1.8fr 90px 90px 130px;
+  grid-template-columns: 1.3fr 110px 1.8fr 90px 90px 190px;
   gap: 12px;
   padding: 0 14px 10px;
   margin-top: 16px;

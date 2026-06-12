@@ -14,6 +14,15 @@ const I18N = {
     language: "语言",
     rulesTitle: "规则列表",
     addRule: "+ 新增",
+    importRules: "导入",
+    exportRules: "导出",
+    duplicate: "复制",
+    importRulesFailed: "导入失败: {message}",
+    importRulesEmpty: "导入文件中没有可用规则。",
+    importRulesSuccess: "已导入 {count} 条规则。",
+    exportRulesSuccess: "规则已导出。",
+    duplicatedRule: "规则已复制。",
+    copySuffix: "副本",
     rule: "规则",
     method: "方法",
     hits: "命中",
@@ -92,6 +101,15 @@ const I18N = {
     language: "Language",
     rulesTitle: "Rules",
     addRule: "+ Add",
+    importRules: "Import",
+    exportRules: "Export",
+    duplicate: "Duplicate",
+    importRulesFailed: "Import failed: {message}",
+    importRulesEmpty: "No usable rules were found in the imported file.",
+    importRulesSuccess: "Imported {count} rules.",
+    exportRulesSuccess: "Rules exported.",
+    duplicatedRule: "Rule duplicated.",
+    copySuffix: "Copy",
     rule: "Rule",
     method: "Method",
     hits: "Hits",
@@ -170,6 +188,15 @@ const I18N = {
     language: "言語",
     rulesTitle: "ルール一覧",
     addRule: "+ 追加",
+    importRules: "インポート",
+    exportRules: "エクスポート",
+    duplicate: "複製",
+    importRulesFailed: "インポートに失敗しました: {message}",
+    importRulesEmpty: "インポートファイルに利用可能なルールがありません。",
+    importRulesSuccess: "{count} 件のルールをインポートしました。",
+    exportRulesSuccess: "ルールをエクスポートしました。",
+    duplicatedRule: "ルールを複製しました。",
+    copySuffix: "コピー",
     rule: "ルール",
     method: "メソッド",
     hits: "命中",
@@ -248,6 +275,15 @@ const I18N = {
     language: "언어",
     rulesTitle: "규칙 목록",
     addRule: "+ 추가",
+    importRules: "가져오기",
+    exportRules: "내보내기",
+    duplicate: "복제",
+    importRulesFailed: "가져오기 실패: {message}",
+    importRulesEmpty: "가져온 파일에 사용할 수 있는 규칙이 없습니다.",
+    importRulesSuccess: "규칙 {count}개를 가져왔습니다.",
+    exportRulesSuccess: "규칙을 내보냈습니다.",
+    duplicatedRule: "규칙을 복제했습니다.",
+    copySuffix: "복사본",
     rule: "규칙",
     method: "메서드",
     hits: "명중",
@@ -333,6 +369,9 @@ const elements = {
   logNextPageButton: document.getElementById("logNextPageButton"),
   logPageInfo: document.getElementById("logPageInfo"),
   addRuleButton: document.getElementById("addRuleButton"),
+  importRulesButton: document.getElementById("importRulesButton"),
+  exportRulesButton: document.getElementById("exportRulesButton"),
+  importRulesFile: document.getElementById("importRulesFile"),
   status: document.getElementById("status"),
   ruleModal: document.getElementById("ruleModal"),
   ruleModalTitle: document.getElementById("ruleModalTitle"),
@@ -454,13 +493,126 @@ function createBlankRule() {
     rewrite: {
       body: ""
     },
-    stats: {
-      hitCount: 0,
-      lastMatchedAt: "",
-      lastMatchedUrl: "",
-      lastResourceType: ""
+    stats: createEmptyStats()
+  };
+}
+
+function createEmptyStats() {
+  return {
+    hitCount: 0,
+    lastMatchedAt: "",
+    lastMatchedUrl: "",
+    lastResourceType: ""
+  };
+}
+
+function createUniqueRuleId(existingIds) {
+  var nextId = createRuleId();
+  while (existingIds.has(nextId)) {
+    nextId = createRuleId();
+  }
+  existingIds.add(nextId);
+  return nextId;
+}
+
+function resetRuleIdentity(rule, existingIds, nameSuffix) {
+  var nextRule = normalizeRule(rule, 0);
+  nextRule.id = createUniqueRuleId(existingIds);
+  nextRule.name = nameSuffix ? nextRule.name + " " + nameSuffix : nextRule.name;
+  nextRule.stats = createEmptyStats();
+  return nextRule;
+}
+
+function getImportRulesPayload(parsed) {
+  if (Array.isArray(parsed)) {
+    return parsed;
+  }
+
+  if (parsed && Array.isArray(parsed.rules)) {
+    return parsed.rules;
+  }
+
+  return [];
+}
+
+function getExportRulesPayload() {
+  return rules.map(function (rule) {
+    var exported = clone(rule);
+    exported.stats = createEmptyStats();
+    return exported;
+  });
+}
+
+function downloadTextFile(filename, text) {
+  var blob = new Blob([text], { type: "application/json" });
+  var url = URL.createObjectURL(blob);
+  var link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(function () {
+    URL.revokeObjectURL(url);
+  }, 0);
+}
+
+function exportRules() {
+  var filename = "response-rewriter-rules-" + new Date().toISOString().slice(0, 10) + ".json";
+  downloadTextFile(filename, JSON.stringify(getExportRulesPayload(), null, 2));
+  setStatus(t("exportRulesSuccess"));
+}
+
+function importRulesFromFile(file) {
+  if (!file) return;
+
+  var reader = new FileReader();
+  reader.onload = function () {
+    try {
+      var parsed = JSON.parse(String(reader.result || ""));
+      var imported = normalizeRules(getImportRulesPayload(parsed));
+      if (!imported.length) {
+        throw new Error(t("importRulesEmpty"));
+      }
+
+      var existingIds = new Set(rules.map(function (rule) { return rule.id; }));
+      var nextRules = imported.map(function (rule) {
+        return resetRuleIdentity(rule, existingIds);
+      });
+      rules = nextRules.concat(rules);
+      rulePage = 1;
+      saveRules(t("importRulesSuccess", { count: nextRules.length }));
+    } catch (error) {
+      setStatus(t("importRulesFailed", { message: error.message }), true);
+    } finally {
+      if (elements.importRulesFile) {
+        elements.importRulesFile.value = "";
+      }
     }
   };
+  reader.onerror = function () {
+    setStatus(t("importRulesFailed", { message: reader.error ? reader.error.message : "unknown" }), true);
+    if (elements.importRulesFile) {
+      elements.importRulesFile.value = "";
+    }
+  };
+  reader.readAsText(file);
+}
+
+function duplicateRule(rule) {
+  var existingIds = new Set(rules.map(function (item) { return item.id; }));
+  var duplicated = resetRuleIdentity(rule, existingIds, "(" + t("copySuffix") + ")");
+  var index = rules.findIndex(function (item) {
+    return item.id === rule.id;
+  });
+  if (index === -1) {
+    rules.unshift(duplicated);
+    rulePage = 1;
+  } else {
+    rules.splice(index + 1, 0, duplicated);
+    rulePage = Math.floor((index + 1) / RULES_PAGE_SIZE) + 1;
+  }
+  saveRules(t("duplicatedRule"));
 }
 
 function normalizeRule(rule, index) {
@@ -660,6 +812,7 @@ function renderRuleList() {
       '</span>' +
       '<span class="row-actions">' +
         '<button type="button" class="table-action" data-action="edit" data-rule-id="' + rule.id + '">' + t("edit") + '</button>' +
+        '<button type="button" class="table-action" data-action="duplicate" data-rule-id="' + rule.id + '">' + t("duplicate") + '</button>' +
         '<button type="button" class="table-action danger-text" data-action="delete" data-rule-id="' + rule.id + '">' + t("delete") + '</button>' +
       '</span>';
     elements.ruleList.appendChild(item);
@@ -971,7 +1124,7 @@ if (elements.resetHitsStatsButton) {
     rules = rules.map(function (r) {
       if (r.id !== hitsModalRuleId) return r;
       var updated = clone(r);
-      updated.stats = { hitCount: 0, lastMatchedAt: "", lastMatchedUrl: "", lastResourceType: "" };
+      updated.stats = createEmptyStats();
       return updated;
     });
     saveRules(t("statsCleared"));
@@ -1113,6 +1266,20 @@ if (elements.formatRewriteBodyButton) {
   elements.formatRewriteBodyButton.addEventListener("click", formatRewriteBody);
 }
 
+if (elements.importRulesButton && elements.importRulesFile) {
+  elements.importRulesButton.addEventListener("click", function () {
+    elements.importRulesFile.click();
+  });
+
+  elements.importRulesFile.addEventListener("change", function () {
+    importRulesFromFile(elements.importRulesFile.files && elements.importRulesFile.files[0]);
+  });
+}
+
+if (elements.exportRulesButton) {
+  elements.exportRulesButton.addEventListener("click", exportRules);
+}
+
 if (elements.localeSelect) {
   elements.localeSelect.addEventListener("change", function () {
     currentLocale = elements.localeSelect.value;
@@ -1140,6 +1307,10 @@ elements.ruleList.addEventListener("click", function (event) {
 
   if (button.dataset.action === "edit") {
     openRuleModal("edit", clone(rule));
+  }
+
+  if (button.dataset.action === "duplicate") {
+    duplicateRule(rule);
   }
 
   if (button.dataset.action === "delete") {
