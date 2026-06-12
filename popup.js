@@ -29,6 +29,11 @@ const I18N = {
     status: "状态",
     actions: "操作",
     logsTitle: "拦截日志",
+    logSearchPlaceholder: "搜索规则、方法或 URL",
+    logTypeAll: "全部类型",
+    logTypeXhr: "XHR",
+    logTypeFetch: "Fetch",
+    emptyFilteredLogs: "没有匹配的拦截日志。",
     clear: "清空",
     time: "时间",
     endpoint: "接口",
@@ -116,6 +121,11 @@ const I18N = {
     status: "Status",
     actions: "Actions",
     logsTitle: "Intercept Logs",
+    logSearchPlaceholder: "Search rule, method, or URL",
+    logTypeAll: "All types",
+    logTypeXhr: "XHR",
+    logTypeFetch: "Fetch",
+    emptyFilteredLogs: "No matching intercept logs.",
     clear: "Clear",
     time: "Time",
     endpoint: "Endpoint",
@@ -203,6 +213,11 @@ const I18N = {
     status: "状態",
     actions: "操作",
     logsTitle: "インターセプトログ",
+    logSearchPlaceholder: "ルール、メソッド、URL を検索",
+    logTypeAll: "すべてのタイプ",
+    logTypeXhr: "XHR",
+    logTypeFetch: "Fetch",
+    emptyFilteredLogs: "一致するインターセプトログはありません。",
     clear: "クリア",
     time: "時間",
     endpoint: "エンドポイント",
@@ -290,6 +305,11 @@ const I18N = {
     status: "상태",
     actions: "작업",
     logsTitle: "인터셉트 로그",
+    logSearchPlaceholder: "규칙, 메서드 또는 URL 검색",
+    logTypeAll: "전체 유형",
+    logTypeXhr: "XHR",
+    logTypeFetch: "Fetch",
+    emptyFilteredLogs: "일치하는 인터셉트 로그가 없습니다.",
     clear: "비우기",
     time: "시간",
     endpoint: "엔드포인트",
@@ -400,6 +420,8 @@ const elements = {
   resetHitsStatsButton: document.getElementById("resetHitsStatsButton"),
   loadExampleButton: document.getElementById("loadExampleButton"),
   clearLogsButton: document.getElementById("clearLogsButton"),
+  logSearchInput: document.getElementById("logSearchInput"),
+  logTypeFilter: document.getElementById("logTypeFilter"),
   localeSelect: document.getElementById("localeSelect"),
   themeSelect: document.getElementById("themeSelect")
 };
@@ -412,6 +434,10 @@ let deleteRuleId = "";
 let modalMode = "create";
 let currentModalRule = null;
 let logs = [];
+let logFilters = {
+  keyword: "",
+  resourceType: ""
+};
 let rulePage = 1;
 let logPage = 1;
 
@@ -677,6 +703,41 @@ function getPageItems(items, page, pageSize) {
   };
 }
 
+function getFilteredLogs() {
+  var keyword = logFilters.keyword.trim().toLowerCase();
+  var resourceType = logFilters.resourceType.trim().toLowerCase();
+
+  return logs.filter(function (log) {
+    if (resourceType && String(log.resourceType || "").toLowerCase() !== resourceType) {
+      return false;
+    }
+
+    if (!keyword) {
+      return true;
+    }
+
+    return [log.url, log.ruleName, log.method, log.resourceType].some(function (value) {
+      return String(value || "").toLowerCase().indexOf(keyword) !== -1;
+    });
+  });
+}
+
+function syncLogFilterInputs() {
+  if (elements.logSearchInput) {
+    elements.logSearchInput.value = logFilters.keyword;
+  }
+  if (elements.logTypeFilter) {
+    elements.logTypeFilter.value = logFilters.resourceType;
+  }
+}
+
+function updateLogFiltersFromInputs() {
+  logFilters.keyword = elements.logSearchInput ? elements.logSearchInput.value : "";
+  logFilters.resourceType = elements.logTypeFilter ? elements.logTypeFilter.value : "";
+  logPage = 1;
+  renderLogList();
+}
+
 /* ================================================================
    Toast notification system
    ================================================================ */
@@ -837,10 +898,13 @@ function renderRuleList() {
 
 function renderLogList() {
   elements.logList.innerHTML = "";
+  syncLogFilterInputs();
   if (elements.clearLogsButton) {
     elements.clearLogsButton.style.display = logs.length > 0 ? "" : "none";
   }
-  var paged = getPageItems(logs, logPage, LOGS_PAGE_SIZE);
+
+  var filteredLogs = getFilteredLogs();
+  var paged = getPageItems(filteredLogs, logPage, LOGS_PAGE_SIZE);
   logPage = paged.page;
 
   if (!logs.length) {
@@ -848,6 +912,15 @@ function renderLogList() {
     empty.className = "empty-state";
     empty.textContent = t("emptyLogs");
     elements.logList.appendChild(empty);
+    renderPagination(elements.logPageInfo, elements.logPrevPageButton, elements.logNextPageButton, 1, 1, 0, true);
+    return;
+  }
+
+  if (!filteredLogs.length) {
+    var filteredEmpty = document.createElement("div");
+    filteredEmpty.className = "empty-state";
+    filteredEmpty.textContent = t("emptyFilteredLogs");
+    elements.logList.appendChild(filteredEmpty);
     renderPagination(elements.logPageInfo, elements.logPrevPageButton, elements.logNextPageButton, 1, 1, 0, true);
     return;
   }
@@ -1280,6 +1353,18 @@ if (elements.exportRulesButton) {
   elements.exportRulesButton.addEventListener("click", exportRules);
 }
 
+if (elements.logSearchInput) {
+  elements.logSearchInput.addEventListener("input", function () {
+    updateLogFiltersFromInputs();
+  });
+}
+
+if (elements.logTypeFilter) {
+  elements.logTypeFilter.addEventListener("change", function () {
+    updateLogFiltersFromInputs();
+  });
+}
+
 if (elements.localeSelect) {
   elements.localeSelect.addEventListener("change", function () {
     currentLocale = elements.localeSelect.value;
@@ -1466,7 +1551,7 @@ chrome.storage.onChanged.addListener(function (changes, areaName) {
 
   if (changes.logs) {
     logs = Array.isArray(changes.logs.newValue) ? changes.logs.newValue : [];
-    logPage = Math.min(logPage, Math.max(1, Math.ceil(logs.length / LOGS_PAGE_SIZE)));
+    logPage = Math.min(logPage, Math.max(1, Math.ceil(getFilteredLogs().length / LOGS_PAGE_SIZE)));
     renderLogList();
   }
 });

@@ -67,6 +67,14 @@
             <h2 data-i18n="logsTitle">拦截日志</h2>
             <button id="clearLogsButton" type="button" class="danger" style="padding:4px 10px;font-size:11px;display:none;" data-i18n="clear">清空</button>
           </div>
+          <div class="log-filter-bar">
+            <input id="logSearchInput" type="search" placeholder="搜索规则、方法或 URL" data-i18n-placeholder="logSearchPlaceholder">
+            <select id="logTypeFilter">
+              <option value="" data-i18n="logTypeAll">全部类型</option>
+              <option value="xhr" data-i18n="logTypeXhr">XHR</option>
+              <option value="fetch" data-i18n="logTypeFetch">Fetch</option>
+            </select>
+          </div>
           <div class="log-head">
             <span data-i18n="time">时间</span>
             <span data-i18n="rule">规则</span>
