@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "XHR Response Interceptor",
+  "name": "ResponseRewriter",
   "version": "0.1.0",
   "description": "Intercepts XHR/fetch responses in the page context and rewrites them with configurable rules.",
   "permissions": [
@@ -10,7 +10,7 @@
     "<all_urls>"
   ],
   "action": {
-    "default_title": "XHR Interceptor"
+    "default_title": "ResponseRewriter"
   },
   "background": {
     "service_worker": "background.js"

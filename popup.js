@@ -6,7 +6,7 @@ const DEFAULT_THEME = "light";
 const THEME_STORAGE_KEY = "theme";
 const I18N = {
   "zh-CN": {
-    appTitle: "XHR / Fetch 拦截器",
+    appTitle: "ResponseRewriter",
     appHint: "配置规则精确匹配请求 URL（忽略查询参数），命中后直接替换整个响应体。命中次数实时记录，右侧日志可查看每一次拦截的原始与改写内容。",
     theme: "主题",
     themeLight: "浅色",
@@ -84,7 +84,7 @@ const I18N = {
     statsCleared: "统计已清空。"
   },
   en: {
-    appTitle: "XHR / Fetch Interceptor",
+    appTitle: "ResponseRewriter",
     appHint: "Configure rules to match request URLs exactly, ignoring query parameters. When a rule hits, the whole response body is replaced and every hit is logged.",
     theme: "Theme",
     themeLight: "Light",
@@ -162,7 +162,7 @@ const I18N = {
     statsCleared: "Stats cleared."
   },
   ja: {
-    appTitle: "XHR / Fetch インターセプター",
+    appTitle: "ResponseRewriter",
     appHint: "リクエスト URL を正確に照合し、クエリパラメータを無視します。命中時はレスポンス本文全体を置き換え、各命中を記録します。",
     theme: "テーマ",
     themeLight: "ライト",
@@ -240,7 +240,7 @@ const I18N = {
     statsCleared: "統計をクリアしました。"
   },
   ko: {
-    appTitle: "XHR / Fetch 인터셉터",
+    appTitle: "ResponseRewriter",
     appHint: "요청 URL을 정확히 매칭하고 쿼리 파라미터는 무시합니다. 명중하면 전체 응답 본문을 교체하고 모든 명중 기록을 저장합니다.",
     theme: "테마",
     themeLight: "라이트",

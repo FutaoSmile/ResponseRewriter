@@ -1,4 +1,4 @@
-# XHR Response Interceptor
+# ResponseRewriter
 
 <p align="center">
   <strong>一个用于拦截并改写 XHR / Fetch 响应的 Chrome 扩展。</strong>
@@ -16,7 +16,7 @@
 
 ## 简介
 
-XHR Response Interceptor 是一个 Chrome Manifest V3 扩展。它会在页面上下文中注入脚本，拦截 `XMLHttpRequest` 和 `fetch` 请求，根据请求方法和 URL 路径匹配规则，并在命中规则后替换响应体。
+ResponseRewriter 是一个 Chrome Manifest V3 扩展。它会在页面上下文中注入脚本，拦截 `XMLHttpRequest` 和 `fetch` 请求，根据请求方法和 URL 路径匹配规则，并在命中规则后替换响应体。
 
 它适合用于本地开发调试、前后端联调、接口 Mock、临时改写响应内容等场景，不需要修改后端服务。
 

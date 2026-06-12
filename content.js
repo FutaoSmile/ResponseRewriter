@@ -1,6 +1,6 @@
 (function () {
-  const SOURCE = "xhr-interceptor-extension";
-  const PAGE_SOURCE = "xhr-interceptor-page";
+  const SOURCE = "response-rewriter-extension";
+  const PAGE_SOURCE = "response-rewriter-page";
   const MAX_LOGS = 100;
   const MAX_RESPONSE_LENGTH = 20000;
 

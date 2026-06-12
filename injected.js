@@ -1,22 +1,22 @@
 (function () {
-  const EXTENSION_SOURCE = "xhr-interceptor-extension";
-  const PAGE_SOURCE = "xhr-interceptor-page";
+  const EXTENSION_SOURCE = "response-rewriter-extension";
+  const PAGE_SOURCE = "response-rewriter-page";
   const TOAST_I18N = {
     "zh-CN": {
-      open: "打开 XHR Interceptor",
-      rewritten: "XHR Interceptor · 响应已改写 · "
+      open: "打开 ResponseRewriter",
+      rewritten: "ResponseRewriter · 响应已改写 · "
     },
     en: {
-      open: "Open XHR Interceptor",
-      rewritten: "XHR Interceptor · Response rewritten · "
+      open: "Open ResponseRewriter",
+      rewritten: "ResponseRewriter · Response rewritten · "
     },
     ja: {
-      open: "XHR Interceptor を開く",
-      rewritten: "XHR Interceptor · レスポンスを書き換えました · "
+      open: "ResponseRewriter を開く",
+      rewritten: "ResponseRewriter · レスポンスを書き換えました · "
     },
     ko: {
-      open: "XHR Interceptor 열기",
-      rewritten: "XHR Interceptor · 응답이 수정됨 · "
+      open: "ResponseRewriter 열기",
+      rewritten: "ResponseRewriter · 응답이 수정됨 · "
     }
   };
   let activeRules = [];
@@ -158,11 +158,11 @@
   }
 
   function getToastContainer(mount) {
-    var container = document.getElementById("__xhr_interceptor_rewrite_toasts__");
+    var container = document.getElementById("__response_rewriter_toasts__");
     if (container) return container;
 
     container = document.createElement("div");
-    container.id = "__xhr_interceptor_rewrite_toasts__";
+    container.id = "__response_rewriter_toasts__";
     container.style.cssText = [
       "position:fixed",
       "right:16px",
@@ -215,8 +215,8 @@
       "text-align:center"
     ].join(";");
 
-    toast.__xhrInterceptorText = text;
-    toast.__xhrInterceptorCount = count;
+    toast.__responseRewriterText = text;
+    toast.__responseRewriterCount = count;
     toast.appendChild(text);
     toast.appendChild(count);
     toast.title = toastText("open");
@@ -247,21 +247,21 @@
     if (!toast) {
       toast = createToastItem();
       toast.dataset.rewriteKey = key;
-      toast.__xhrInterceptorHitCount = 0;
+      toast.__responseRewriterHitCount = 0;
       container.insertBefore(toast, container.firstChild);
     }
 
-    toast.__xhrInterceptorHitCount += 1;
-    toast.__xhrInterceptorText.textContent = toastText("rewritten") + key;
-    if (toast.__xhrInterceptorHitCount > 1) {
-      toast.__xhrInterceptorCount.style.display = "inline-block";
-      toast.__xhrInterceptorCount.textContent = "x" + toast.__xhrInterceptorHitCount;
+    toast.__responseRewriterHitCount += 1;
+    toast.__responseRewriterText.textContent = toastText("rewritten") + key;
+    if (toast.__responseRewriterHitCount > 1) {
+      toast.__responseRewriterCount.style.display = "inline-block";
+      toast.__responseRewriterCount.textContent = "x" + toast.__responseRewriterHitCount;
     }
     toast.style.opacity = "1";
     toast.style.transform = "translateY(0)";
 
-    clearTimeout(toast.__xhrInterceptorTimer);
-    toast.__xhrInterceptorTimer = setTimeout(function () {
+    clearTimeout(toast.__responseRewriterTimer);
+    toast.__responseRewriterTimer = setTimeout(function () {
       toast.style.opacity = "0";
       toast.style.transform = "translateY(-4px)";
       setTimeout(function () {

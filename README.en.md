@@ -1,4 +1,4 @@
-# XHR Response Interceptor
+# ResponseRewriter
 
 <p align="center">
   <strong>A Chrome extension for intercepting and rewriting XHR / Fetch responses with configurable rules.</strong>
@@ -16,7 +16,7 @@
 
 ## Introduction
 
-XHR Response Interceptor is a Chrome Manifest V3 extension that injects a page-context script to hook `XMLHttpRequest` and `fetch`, match requests by method and URL path, and replace the response body when a rule is hit.
+ResponseRewriter is a Chrome Manifest V3 extension that injects a page-context script to hook `XMLHttpRequest` and `fetch`, match requests by method and URL path, and replace the response body when a rule is hit.
 
 It is designed for local development, debugging, frontend integration testing, mock API responses, and quick response rewriting without changing backend services.
 
