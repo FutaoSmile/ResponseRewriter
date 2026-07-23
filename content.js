@@ -18,11 +18,17 @@
       name: rule && rule.name ? String(rule.name) : "未命名规则",
       match: {
         method: match.method ? String(match.method).toUpperCase() : "",
+        urlMode: match.urlMode === "contains" || match.urlMode === "regex"
+          ? match.urlMode
+          : "exact",
         url: typeof match.url === "string"
           ? match.url
           : (match.url && typeof match.url.value === "string" ? match.url.value : "")
       },
       rewrite: {
+        mode: rewrite.mode === "json-merge" || rewrite.mode === "script"
+          ? rewrite.mode
+          : "replace",
         body: typeof rewrite.body === "string" ? rewrite.body : ""
       },
       stats: {

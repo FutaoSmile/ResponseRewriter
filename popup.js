@@ -7,7 +7,7 @@ const THEME_STORAGE_KEY = "theme";
 const I18N = {
   "zh-CN": {
     appTitle: "ResponseRewriter",
-    appHint: "配置规则精确匹配请求 URL（忽略查询参数），命中后直接替换整个响应体。命中次数实时记录，右侧日志可查看每一次拦截的原始与改写内容。",
+    appHint: "按精确、包含或正则方式匹配请求 URL，并替换、合并或动态转换响应。命中次数实时记录，右侧日志可查看每一次拦截的原始与改写内容。",
     theme: "主题",
     themeLight: "浅色",
     themeDark: "暗黑",
@@ -39,16 +39,32 @@ const I18N = {
     endpoint: "接口",
     prevPage: "上一页",
     nextPage: "下一页",
-    ruleModalNote: "只配置请求方法、URL 和返回内容。",
+    ruleModalNote: "选择 URL 匹配方式和响应处理方式。",
     close: "关闭",
     ruleName: "规则名称",
     ruleNamePlaceholder: "例如：改写用户信息",
     requestMethod: "请求方法",
     all: "全部",
     enabled: "启用",
-    urlMatch: "URL 匹配（精确匹配路径，忽略 ? 参数）",
+    urlMatchMode: "URL 匹配方式",
+    urlModeExact: "精确匹配",
+    urlModeContains: "包含匹配",
+    urlModeRegex: "正则匹配",
+    urlMatch: "URL 匹配值",
+    urlMatchPlaceholder: "例如 /api/users 或 ^https://api\\.example\\.com/users/\\d+$",
+    rewriteMode: "响应处理方式",
+    rewriteModeReplace: "整段替换",
+    rewriteModeJsonMerge: "JSON 局部合并",
+    rewriteModeScript: "JavaScript 转换",
+    rewriteHintReplace: "使用填写内容替换整个响应体。",
+    rewriteHintJsonMerge: "递归合并 JSON 对象；数组和普通值会被替换。",
+    rewriteHintScript: "可使用 originalResponse 和 context，返回字符串或 JSON 值。",
     responseBody: "返回内容",
     responseBodyPlaceholder: "输入命中后直接返回的 JSON 响应内容",
+    responseBodyMerge: "要合并的 JSON",
+    responseBodyMergePlaceholder: "{\n  \"role\": \"admin\"\n}",
+    responseBodyScript: "转换脚本",
+    responseBodyScriptPlaceholder: "const data = JSON.parse(originalResponse);\ndata.role = \"admin\";\nreturn data;",
     format: "格式化",
     save: "保存",
     deleteRule: "删除规则",
@@ -81,6 +97,8 @@ const I18N = {
     hitRecordsTitle: "{name} — 命中记录",
     ruleNameRequired: "规则名称不能为空。",
     urlRequired: "URL 匹配值不能为空。",
+    invalidRegex: "URL 正则表达式无效: {message}",
+    mergeBodyMustBeObject: "JSON 局部合并内容必须是合法的 JSON 对象。",
     emptyResponseBody: "返回内容为空，无法格式化。",
     responseBodyFormatted: "返回内容已格式化。",
     invalidJson: "返回内容不是合法 JSON，无法格式化。",
@@ -99,7 +117,7 @@ const I18N = {
   },
   en: {
     appTitle: "ResponseRewriter",
-    appHint: "Configure rules to match request URLs exactly, ignoring query parameters. When a rule hits, the whole response body is replaced and every hit is logged.",
+    appHint: "Match request URLs exactly, by substring, or by regular expression, then replace, merge, or dynamically transform responses. Every hit is logged.",
     theme: "Theme",
     themeLight: "Light",
     themeDark: "Dark",
@@ -131,16 +149,32 @@ const I18N = {
     endpoint: "Endpoint",
     prevPage: "Previous",
     nextPage: "Next",
-    ruleModalNote: "Configure only method, URL, and response body.",
+    ruleModalNote: "Choose how the URL is matched and how the response is processed.",
     close: "Close",
     ruleName: "Rule Name",
     ruleNamePlaceholder: "Example: rewrite user profile",
     requestMethod: "Request Method",
     all: "All",
     enabled: "Enabled",
-    urlMatch: "URL Match (exact path, ignores ? parameters)",
+    urlMatchMode: "URL Match Mode",
+    urlModeExact: "Exact",
+    urlModeContains: "Contains",
+    urlModeRegex: "Regular Expression",
+    urlMatch: "URL Match Value",
+    urlMatchPlaceholder: "Example: /api/users or ^https://api\\.example\\.com/users/\\d+$",
+    rewriteMode: "Response Mode",
+    rewriteModeReplace: "Replace Entire Body",
+    rewriteModeJsonMerge: "Merge JSON",
+    rewriteModeScript: "JavaScript Transform",
+    rewriteHintReplace: "Replace the entire response body with the entered content.",
+    rewriteHintJsonMerge: "Recursively merges JSON objects; arrays and primitive values are replaced.",
+    rewriteHintScript: "Use originalResponse and context, then return a string or JSON value.",
     responseBody: "Response Body",
     responseBodyPlaceholder: "Enter the JSON response body returned after a hit",
+    responseBodyMerge: "JSON Patch",
+    responseBodyMergePlaceholder: "{\n  \"role\": \"admin\"\n}",
+    responseBodyScript: "Transform Script",
+    responseBodyScriptPlaceholder: "const data = JSON.parse(originalResponse);\ndata.role = \"admin\";\nreturn data;",
     format: "Format",
     save: "Save",
     deleteRule: "Delete Rule",
@@ -173,6 +207,8 @@ const I18N = {
     hitRecordsTitle: "{name} — Hit Records",
     ruleNameRequired: "Rule name is required.",
     urlRequired: "URL match value is required.",
+    invalidRegex: "Invalid URL regular expression: {message}",
+    mergeBodyMustBeObject: "JSON merge content must be a valid JSON object.",
     emptyResponseBody: "Response body is empty and cannot be formatted.",
     responseBodyFormatted: "Response body formatted.",
     invalidJson: "Response body is not valid JSON.",
@@ -191,7 +227,7 @@ const I18N = {
   },
   ja: {
     appTitle: "ResponseRewriter",
-    appHint: "リクエスト URL を正確に照合し、クエリパラメータを無視します。命中時はレスポンス本文全体を置き換え、各命中を記録します。",
+    appHint: "リクエスト URL を完全一致、部分一致、正規表現で照合し、レスポンスを置換、マージ、または動的変換します。命中はすべて記録されます。",
     theme: "テーマ",
     themeLight: "ライト",
     themeDark: "ダーク",
@@ -223,16 +259,32 @@ const I18N = {
     endpoint: "エンドポイント",
     prevPage: "前へ",
     nextPage: "次へ",
-    ruleModalNote: "リクエストメソッド、URL、レスポンス本文のみを設定します。",
+    ruleModalNote: "URL の照合方法とレスポンスの処理方法を選択します。",
     close: "閉じる",
     ruleName: "ルール名",
     ruleNamePlaceholder: "例: ユーザー情報を書き換え",
     requestMethod: "リクエストメソッド",
     all: "すべて",
     enabled: "有効",
-    urlMatch: "URL マッチ（パスを正確に照合、? パラメータは無視）",
+    urlMatchMode: "URL 照合方法",
+    urlModeExact: "完全一致",
+    urlModeContains: "部分一致",
+    urlModeRegex: "正規表現",
+    urlMatch: "URL 照合値",
+    urlMatchPlaceholder: "例: /api/users または ^https://api\\.example\\.com/users/\\d+$",
+    rewriteMode: "レスポンス処理",
+    rewriteModeReplace: "全体を置換",
+    rewriteModeJsonMerge: "JSON をマージ",
+    rewriteModeScript: "JavaScript 変換",
+    rewriteHintReplace: "入力内容でレスポンス本文全体を置き換えます。",
+    rewriteHintJsonMerge: "JSON オブジェクトを再帰的にマージし、配列と通常値は置き換えます。",
+    rewriteHintScript: "originalResponse と context を使用し、文字列または JSON 値を返します。",
     responseBody: "レスポンス本文",
     responseBodyPlaceholder: "命中後に返す JSON レスポンス本文を入力",
+    responseBodyMerge: "マージする JSON",
+    responseBodyMergePlaceholder: "{\n  \"role\": \"admin\"\n}",
+    responseBodyScript: "変換スクリプト",
+    responseBodyScriptPlaceholder: "const data = JSON.parse(originalResponse);\ndata.role = \"admin\";\nreturn data;",
     format: "整形",
     save: "保存",
     deleteRule: "ルールを削除",
@@ -265,6 +317,8 @@ const I18N = {
     hitRecordsTitle: "{name} — 命中記録",
     ruleNameRequired: "ルール名は必須です。",
     urlRequired: "URL マッチ値は必須です。",
+    invalidRegex: "URL の正規表現が無効です: {message}",
+    mergeBodyMustBeObject: "JSON マージ内容には有効な JSON オブジェクトが必要です。",
     emptyResponseBody: "レスポンス本文が空のため整形できません。",
     responseBodyFormatted: "レスポンス本文を整形しました。",
     invalidJson: "レスポンス本文は有効な JSON ではありません。",
@@ -283,7 +337,7 @@ const I18N = {
   },
   ko: {
     appTitle: "ResponseRewriter",
-    appHint: "요청 URL을 정확히 매칭하고 쿼리 파라미터는 무시합니다. 명중하면 전체 응답 본문을 교체하고 모든 명중 기록을 저장합니다.",
+    appHint: "요청 URL을 정확히, 포함 또는 정규식으로 매칭하고 응답을 교체, 병합 또는 동적으로 변환합니다. 모든 명중 기록을 저장합니다.",
     theme: "테마",
     themeLight: "라이트",
     themeDark: "다크",
@@ -315,16 +369,32 @@ const I18N = {
     endpoint: "엔드포인트",
     prevPage: "이전",
     nextPage: "다음",
-    ruleModalNote: "요청 메서드, URL, 응답 본문만 설정합니다.",
+    ruleModalNote: "URL 매칭 방식과 응답 처리 방식을 선택합니다.",
     close: "닫기",
     ruleName: "규칙 이름",
     ruleNamePlaceholder: "예: 사용자 정보 수정",
     requestMethod: "요청 메서드",
     all: "전체",
     enabled: "사용",
-    urlMatch: "URL 매칭 (경로 정확히 매칭, ? 파라미터 무시)",
+    urlMatchMode: "URL 매칭 방식",
+    urlModeExact: "정확히 일치",
+    urlModeContains: "포함",
+    urlModeRegex: "정규식",
+    urlMatch: "URL 매칭 값",
+    urlMatchPlaceholder: "예: /api/users 또는 ^https://api\\.example\\.com/users/\\d+$",
+    rewriteMode: "응답 처리 방식",
+    rewriteModeReplace: "전체 교체",
+    rewriteModeJsonMerge: "JSON 병합",
+    rewriteModeScript: "JavaScript 변환",
+    rewriteHintReplace: "입력한 내용으로 전체 응답 본문을 교체합니다.",
+    rewriteHintJsonMerge: "JSON 객체를 재귀적으로 병합하며 배열과 일반 값은 교체합니다.",
+    rewriteHintScript: "originalResponse와 context를 사용하고 문자열 또는 JSON 값을 반환합니다.",
     responseBody: "응답 본문",
     responseBodyPlaceholder: "명중 후 반환할 JSON 응답 본문을 입력하세요",
+    responseBodyMerge: "병합할 JSON",
+    responseBodyMergePlaceholder: "{\n  \"role\": \"admin\"\n}",
+    responseBodyScript: "변환 스크립트",
+    responseBodyScriptPlaceholder: "const data = JSON.parse(originalResponse);\ndata.role = \"admin\";\nreturn data;",
     format: "포맷",
     save: "저장",
     deleteRule: "규칙 삭제",
@@ -357,6 +427,8 @@ const I18N = {
     hitRecordsTitle: "{name} — 명중 기록",
     ruleNameRequired: "규칙 이름은 필수입니다.",
     urlRequired: "URL 매칭 값은 필수입니다.",
+    invalidRegex: "URL 정규식이 올바르지 않습니다: {message}",
+    mergeBodyMustBeObject: "JSON 병합 내용은 올바른 JSON 객체여야 합니다.",
     emptyResponseBody: "응답 본문이 비어 있어 포맷할 수 없습니다.",
     responseBodyFormatted: "응답 본문을 포맷했습니다.",
     invalidJson: "응답 본문이 올바른 JSON이 아닙니다.",
@@ -408,7 +480,11 @@ const elements = {
   ruleName: document.getElementById("ruleName"),
   ruleEnabled: document.getElementById("ruleEnabled"),
   matchMethod: document.getElementById("matchMethod"),
+  urlMatchMode: document.getElementById("urlMatchMode"),
   urlMatchValue: document.getElementById("urlMatchValue"),
+  rewriteMode: document.getElementById("rewriteMode"),
+  rewriteModeHint: document.getElementById("rewriteModeHint"),
+  responseBodyLabel: document.getElementById("responseBodyLabel"),
   rewriteBody: document.getElementById("rewriteBody"),
   formatRewriteBodyButton: document.getElementById("formatRewriteBodyButton"),
   ruleCount: document.getElementById("ruleCount"),
@@ -503,6 +579,7 @@ function applyLocale() {
     localeSelect.value = currentLocale;
   }
 
+  updateRewriteModeUi();
   renderRuleList();
   renderLogList();
 }
@@ -514,9 +591,11 @@ function createBlankRule() {
     name: t("newRule"),
     match: {
       method: "",
+      urlMode: "exact",
       url: ""
     },
     rewrite: {
+      mode: "replace",
       body: ""
     },
     stats: createEmptyStats()
@@ -651,11 +730,17 @@ function normalizeRule(rule, index) {
     name: rule && rule.name ? String(rule.name) : t("unnamedRule"),
     match: {
       method: match.method ? String(match.method).toUpperCase() : "",
+      urlMode: match.urlMode === "contains" || match.urlMode === "regex"
+        ? match.urlMode
+        : "exact",
       url: typeof match.url === "string"
         ? match.url
         : (match.url && typeof match.url.value === "string" ? match.url.value : "")
     },
     rewrite: {
+      mode: rewrite.mode === "json-merge" || rewrite.mode === "script"
+        ? rewrite.mode
+        : "replace",
       body: typeof rewrite.body === "string" ? rewrite.body : ""
     },
     stats: {
@@ -857,13 +942,18 @@ function renderRuleList() {
   }
 
   paged.items.forEach(function (rule, index) {
+    var urlModeLabel = rule.match.urlMode === "contains"
+      ? t("urlModeContains")
+      : (rule.match.urlMode === "regex" ? t("urlModeRegex") : t("urlModeExact"));
     var item = document.createElement("div");
     item.className = "rule-item";
     item.style.animationDelay = (index * 0.04) + "s";
     item.innerHTML =
       '<span class="rule-title">' + escapeHtml(rule.name) + '</span>' +
       '<span class="rule-meta">' + (rule.match.method || t("all")) + '</span>' +
-      '<span class="rule-meta">' + escapeHtml(rule.match.url || t("unset")) + '</span>' +
+      '<span class="rule-meta" title="' + escapeHtml(urlModeLabel) + '">' +
+        escapeHtml(urlModeLabel + " · " + (rule.match.url || t("unset"))) +
+      '</span>' +
       '<span><span class="badge hit-badge ' + (rule.stats.hitCount > 0 ? "hit" : "miss") + '" data-action="view-hits" data-rule-id="' + rule.id + '">' + String(rule.stats.hitCount) + '</span></span>' +
       '<span>' +
         '<label class="switch list-switch">' +
@@ -965,9 +1055,42 @@ function fillRuleForm(rule) {
   elements.ruleName.value = rule.name;
   elements.ruleEnabled.checked = rule.enabled;
   elements.matchMethod.value = rule.match.method;
+  if (elements.urlMatchMode) {
+    elements.urlMatchMode.value = rule.match.urlMode;
+  }
   elements.urlMatchValue.value = rule.match.url;
+  if (elements.rewriteMode) {
+    elements.rewriteMode.value = rule.rewrite.mode;
+  }
   if (elements.rewriteBody) {
     elements.rewriteBody.value = rule.rewrite.body;
+  }
+  updateRewriteModeUi();
+}
+
+function updateRewriteModeUi() {
+  if (!elements.rewriteMode || !elements.rewriteBody) return;
+
+  var mode = elements.rewriteMode.value;
+  var hintKey = mode === "json-merge"
+    ? "rewriteHintJsonMerge"
+    : (mode === "script" ? "rewriteHintScript" : "rewriteHintReplace");
+  var labelKey = mode === "json-merge"
+    ? "responseBodyMerge"
+    : (mode === "script" ? "responseBodyScript" : "responseBody");
+  var placeholderKey = mode === "json-merge"
+    ? "responseBodyMergePlaceholder"
+    : (mode === "script" ? "responseBodyScriptPlaceholder" : "responseBodyPlaceholder");
+
+  if (elements.rewriteModeHint) {
+    elements.rewriteModeHint.textContent = t(hintKey);
+  }
+  if (elements.responseBodyLabel) {
+    elements.responseBodyLabel.textContent = t(labelKey);
+  }
+  elements.rewriteBody.placeholder = t(placeholderKey);
+  if (elements.formatRewriteBodyButton) {
+    elements.formatRewriteBodyButton.hidden = mode === "script";
   }
 }
 
@@ -1216,6 +1339,23 @@ function validateRule(rule) {
   if (!rule.match.url.trim()) {
     throw new Error(t("urlRequired"));
   }
+  if (rule.match.urlMode === "regex") {
+    try {
+      new RegExp(rule.match.url);
+    } catch (error) {
+      throw new Error(t("invalidRegex", { message: error.message }));
+    }
+  }
+  if (rule.rewrite.mode === "json-merge") {
+    try {
+      var patch = JSON.parse(rule.rewrite.body);
+      if (!patch || Array.isArray(patch) || typeof patch !== "object") {
+        throw new Error();
+      }
+    } catch (error) {
+      throw new Error(t("mergeBodyMustBeObject"));
+    }
+  }
 }
 
 /* ================================================================
@@ -1229,9 +1369,11 @@ function readRuleFromForm(existingRule) {
     name: elements.ruleName.value.trim() || t("unnamedRule"),
     match: {
       method: elements.matchMethod.value,
+      urlMode: elements.urlMatchMode ? elements.urlMatchMode.value : existingRule.match.urlMode,
       url: elements.urlMatchValue.value.trim()
     },
     rewrite: {
+      mode: elements.rewriteMode ? elements.rewriteMode.value : existingRule.rewrite.mode,
       body: elements.rewriteBody ? elements.rewriteBody.value : ""
     },
     stats: clone(existingRule.stats)
@@ -1337,6 +1479,10 @@ if (elements.clearLogsButton) {
 
 if (elements.formatRewriteBodyButton) {
   elements.formatRewriteBodyButton.addEventListener("click", formatRewriteBody);
+}
+
+if (elements.rewriteMode) {
+  elements.rewriteMode.addEventListener("change", updateRewriteModeUi);
 }
 
 if (elements.importRulesButton && elements.importRulesFile) {

@@ -5,9 +5,11 @@
     "name": "改写用户信息接口",
     "match": {
       "method": "GET",
+      "urlMode": "exact",
       "url": "/api/user/profile"
     },
     "rewrite": {
+      "mode": "replace",
       "body": "{\n  \"nickname\": \"mocked-by-extension\"\n}"
     },
     "stats": {

@@ -11,7 +11,7 @@
       <header class="page-header">
         <div>
           <h1 data-i18n="appTitle">ResponseRewriter</h1>
-          <p class="hint" data-i18n="appHint">配置规则精确匹配请求 URL（忽略查询参数），命中后直接替换整个响应体。命中次数实时记录，右侧日志可查看每一次拦截的原始与改写内容。</p>
+          <p class="hint" data-i18n="appHint">按精确、包含或正则方式匹配请求 URL，并替换、合并或动态转换响应。命中次数实时记录，右侧日志可查看每一次拦截的原始与改写内容。</p>
         </div>
         <div class="header-controls">
           <label class="header-select">
@@ -100,7 +100,7 @@
         <div class="modal-header">
           <div>
             <h2 id="ruleModalTitle">新增规则</h2>
-            <p class="panel-note" data-i18n="ruleModalNote">只配置请求方法、URL 和返回内容。</p>
+            <p class="panel-note" data-i18n="ruleModalNote">选择 URL 匹配方式和响应处理方式。</p>
           </div>
           <button id="closeRuleModalButton" type="button" class="icon-button" aria-label="关闭" data-i18n-aria-label="close">&times;</button>
         </div>
@@ -133,12 +133,32 @@
             </label>
           </div>
 
-          <label class="field">
-            <span data-i18n="urlMatch">URL 匹配（精确匹配路径，忽略 ? 参数）</span>
-            <input id="urlMatchValue" type="text" placeholder="https://example.com/api/user/profile">
+          <div class="match-config-grid">
+            <label class="field">
+              <span data-i18n="urlMatchMode">URL 匹配方式</span>
+              <select id="urlMatchMode">
+                <option value="exact" data-i18n="urlModeExact">精确匹配</option>
+                <option value="contains" data-i18n="urlModeContains">包含匹配</option>
+                <option value="regex" data-i18n="urlModeRegex">正则匹配</option>
+              </select>
+            </label>
+            <label class="field">
+              <span data-i18n="urlMatch">URL 匹配值</span>
+              <input id="urlMatchValue" type="text" placeholder="https://example.com/api/user/profile" data-i18n-placeholder="urlMatchPlaceholder">
+            </label>
+          </div>
+
+          <label class="field response-mode-field">
+            <span data-i18n="rewriteMode">响应处理方式</span>
+            <select id="rewriteMode">
+              <option value="replace" data-i18n="rewriteModeReplace">整段替换</option>
+              <option value="json-merge" data-i18n="rewriteModeJsonMerge">JSON 局部合并</option>
+              <option value="script" data-i18n="rewriteModeScript">JavaScript 转换</option>
+            </select>
+            <small id="rewriteModeHint" class="field-hint"></small>
           </label>
           <label class="field">
-            <span data-i18n="responseBody">返回内容</span>
+            <span id="responseBodyLabel" data-i18n="responseBody">返回内容</span>
             <div class="textarea-action-wrap">
               <textarea id="rewriteBody" placeholder="输入命中后直接返回的 JSON 响应内容" spellcheck="false" data-i18n-placeholder="responseBodyPlaceholder"></textarea>
               <button id="formatRewriteBodyButton" type="button" class="textarea-action-button" data-i18n="format">格式化</button>

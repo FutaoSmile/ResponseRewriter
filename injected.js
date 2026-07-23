@@ -20,6 +20,36 @@
     }
   };
   let activeRules = [];
+  let rulesReady = false;
+  const rulesReadyCallbacks = [];
+  const RULES_READY_TIMEOUT = 500;
+
+  function markRulesReady() {
+    rulesReady = true;
+    while (rulesReadyCallbacks.length) {
+      rulesReadyCallbacks.shift()();
+    }
+  }
+
+  function waitForRules() {
+    if (rulesReady) {
+      return Promise.resolve();
+    }
+
+    return new Promise(function (resolve) {
+      var resolved = false;
+      var timer = setTimeout(markRulesReady, RULES_READY_TIMEOUT);
+
+      function done() {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timer);
+        resolve();
+      }
+
+      rulesReadyCallbacks.push(done);
+    });
+  }
 
   function getToastLocale() {
     var lang = String(navigator.language || "").toLowerCase();
@@ -41,13 +71,28 @@
     return String(actual || "").toUpperCase() === String(expected).toUpperCase();
   }
 
-  function matchesUrl(actual, expected) {
+  function matchesUrl(actual, expected, mode) {
     if (!expected) {
       return false;
     }
 
     var actualText = String(actual || "").trim();
     var expectedText = String(expected || "").trim();
+    var comparableUrl = stripUrlSuffix(actualText);
+    mode = mode || "exact";
+
+    if (mode === "contains") {
+      return comparableUrl.indexOf(expectedText) !== -1;
+    }
+
+    if (mode === "regex") {
+      try {
+        return new RegExp(expectedText).test(comparableUrl);
+      } catch (e) {
+        return false;
+      }
+    }
+
     var actualUrl = parseUrl(actualText);
     var expectedUrl = parseUrl(expectedText);
 
@@ -89,12 +134,78 @@
     }
 
     return matchesMethod(context.method, rule.match && rule.match.method) &&
-      matchesUrl(context.url, rule.match && rule.match.url);
+      matchesUrl(
+        context.url,
+        rule.match && rule.match.url,
+        rule.match && rule.match.urlMode
+      );
   }
 
-  function applyRewrite(rule, originalText) {
+  function isPlainObject(value) {
+    return Object.prototype.toString.call(value) === "[object Object]";
+  }
+
+  function mergeJsonObject(original, patch) {
+    var result = Object.assign({}, original);
+
+    Object.keys(patch).forEach(function (key) {
+      if (key === "__proto__" || key === "constructor" || key === "prototype") {
+        return;
+      }
+
+      result[key] = isPlainObject(result[key]) && isPlainObject(patch[key])
+        ? mergeJsonObject(result[key], patch[key])
+        : patch[key];
+    });
+
+    return result;
+  }
+
+  function toResponseText(value, fallback) {
+    if (typeof value === "undefined") {
+      return fallback;
+    }
+    if (typeof value === "string") {
+      return value;
+    }
+
+    var serialized = JSON.stringify(value);
+    return typeof serialized === "string" ? serialized : fallback;
+  }
+
+  function applyRewrite(rule, context) {
     const body = rule && rule.rewrite ? rule.rewrite.body : "";
-    return typeof body === "string" ? body : originalText;
+    const mode = rule && rule.rewrite ? rule.rewrite.mode : "replace";
+    const originalText = context.responseText;
+
+    if (typeof body !== "string") {
+      return originalText;
+    }
+
+    try {
+      if (mode === "json-merge") {
+        const original = JSON.parse(originalText);
+        const patch = JSON.parse(body);
+        if (!isPlainObject(original) || !isPlainObject(patch)) {
+          return originalText;
+        }
+        return JSON.stringify(mergeJsonObject(original, patch));
+      }
+
+      if (mode === "script") {
+        const transform = new Function("originalResponse", "context", body);
+        return toResponseText(transform(originalText, {
+          method: context.method,
+          url: context.url,
+          resourceType: context.resourceType
+        }), originalText);
+      }
+    } catch (error) {
+      console.error("ResponseRewriter transform failed:", error);
+      return originalText;
+    }
+
+    return body;
   }
 
   function hasMatchableRules() {
@@ -137,7 +248,7 @@
       }
 
       matchedRules.push(rule);
-      currentText = applyRewrite(rule, currentText);
+      currentText = applyRewrite(rule, nextContext);
     }
 
     return { text: currentText, matchedRules };
@@ -296,75 +407,71 @@
     const nativeOpen = XMLHttpRequest.prototype.open;
     const nativeSend = XMLHttpRequest.prototype.send;
 
-    XMLHttpRequest.prototype.open = function (method, url) {
+    XMLHttpRequest.prototype.open = function (method, url, async) {
       this.__interceptor = {
         method: method || "GET",
-        url: url
+        url: url,
+        async: async !== false
       };
       return nativeOpen.apply(this, arguments);
     };
 
     XMLHttpRequest.prototype.send = function () {
-      if (!this.__interceptorBound) {
-        this.__interceptorBound = true;
+      const xhr = this;
 
-        // Only attach the listener if any enabled rule could match
-        const couldMatch = activeRules.some(function (rule) {
-          return ruleApplies(rule, {
-            method: this.__interceptor.method,
-            url: this.__interceptor.url,
-            responseText: ""
+      if (!xhr.__interceptorBound) {
+        xhr.__interceptorBound = true;
+
+        xhr.addEventListener("readystatechange", function () {
+          if (xhr.readyState !== 4 || !xhr.__interceptor) {
+            return;
+          }
+
+          if (xhr.responseType !== "" && xhr.responseType !== "text") {
+            return;
+          }
+
+          if (typeof xhr.responseText !== "string") {
+            return;
+          }
+
+          const result = rewriteText({
+            resourceType: "xhr",
+            method: xhr.__interceptor.method,
+            url: String(xhr.responseURL || xhr.__interceptor.url || ""),
+            responseText: xhr.responseText
           });
-        }, this);
 
-        if (couldMatch) {
-          this.addEventListener("readystatechange", function () {
-            if (this.readyState !== 4 || !this.__interceptor) {
-              return;
-            }
+          if (result.text === xhr.responseText) {
+            return;
+          }
 
-            if (this.responseType !== "" && this.responseType !== "text") {
-              return;
-            }
-
-            if (typeof this.responseText !== "string") {
-              return;
-            }
-
-            const result = rewriteText({
+          result.matchedRules.forEach(function (rule) {
+            emitRuleHit(rule, {
               resourceType: "xhr",
-              method: this.__interceptor.method,
-              url: String(this.responseURL || this.__interceptor.url || ""),
-              responseText: this.responseText
-            });
-
-            if (result.text === this.responseText) {
-              return;
-            }
-
-            result.matchedRules.forEach(function (rule) {
-              emitRuleHit(rule, {
-                resourceType: "xhr",
-                method: this.__interceptor.method,
-                url: String(this.responseURL || this.__interceptor.url || ""),
-                originalResponse: this.responseText,
-                rewrittenResponse: result.text
-              });
-            }, this);
-
-            Object.defineProperty(this, "responseText", {
-              configurable: true,
-              value: result.text
-            });
-            Object.defineProperty(this, "response", {
-              configurable: true,
-              value: result.text
+              method: xhr.__interceptor.method,
+              url: String(xhr.responseURL || xhr.__interceptor.url || ""),
+              originalResponse: xhr.responseText,
+              rewrittenResponse: result.text
             });
           });
-        }
+
+          Object.defineProperty(xhr, "responseText", {
+            configurable: true,
+            value: result.text
+          });
+          Object.defineProperty(xhr, "response", {
+            configurable: true,
+            value: result.text
+          });
+        });
       }
 
-      return nativeSend.apply(this, arguments);
+      if (xhr.__interceptor && xhr.__interceptor.async !== false) {
+        waitForRules();
+      }
+
+      return nativeSend.apply(xhr, arguments);
     };
   }
 
@@ -372,62 +479,66 @@
     const nativeFetch = window.fetch;
 
     window.fetch = function (input, init) {
-      if (!hasMatchableRules()) {
-        return nativeFetch.apply(this, arguments);
-      }
-
+      const fetchThis = this;
+      const fetchArgs = arguments;
       const requestContext = getFetchContext(input, init);
 
-      // Check if any enabled rule could match — if not, use native fetch to preserve streaming
-      const couldMatch = activeRules.some(function (rule) {
-        return ruleApplies(rule, {
-          method: requestContext.method,
-          url: requestContext.url,
-          responseText: ""
-        });
-      });
-
-      if (!couldMatch) {
-        return nativeFetch.apply(this, arguments);
-      }
-
-      // At least one rule matches — await full response so we can rewrite it
-      return nativeFetch.apply(this, arguments).then(async function (response) {
-        let originalText = "";
-        try {
-          originalText = await response.clone().text();
-        } catch (e) {
-          return response;
+      return waitForRules().then(function () {
+        if (!hasMatchableRules()) {
+          return nativeFetch.apply(fetchThis, fetchArgs);
         }
 
-        const result = rewriteText({
-          resourceType: "fetch",
-          method: requestContext.method,
-          url: requestContext.url,
-          responseText: originalText
-        });
-
-        if (result.text === originalText) {
-          return response;
-        }
-
-        result.matchedRules.forEach(function (rule) {
-          emitRuleHit(rule, {
-            resourceType: "fetch",
+        // Check if any enabled rule could match — if not, use native fetch to preserve streaming
+        const couldMatch = activeRules.some(function (rule) {
+          return ruleApplies(rule, {
             method: requestContext.method,
-            url: response.url || requestContext.url,
-            originalResponse: originalText,
-            rewrittenResponse: result.text
+            url: requestContext.url,
+            responseText: ""
           });
         });
 
-        const headers = new Headers(response.headers);
-        headers.delete("content-length");
+        if (!couldMatch) {
+          return nativeFetch.apply(fetchThis, fetchArgs);
+        }
 
-        return new Response(result.text, {
-          status: response.status,
-          statusText: response.statusText,
-          headers: headers
+        // At least one rule matches — await full response so we can rewrite it
+        return nativeFetch.apply(fetchThis, fetchArgs).then(async function (response) {
+          let originalText = "";
+          try {
+            originalText = await response.clone().text();
+          } catch (e) {
+            return response;
+          }
+
+          const result = rewriteText({
+            resourceType: "fetch",
+            method: requestContext.method,
+            url: response.url || requestContext.url,
+            responseText: originalText
+          });
+
+          if (result.text === originalText) {
+            return response;
+          }
+
+          result.matchedRules.forEach(function (rule) {
+            emitRuleHit(rule, {
+              resourceType: "fetch",
+              method: requestContext.method,
+              url: response.url || requestContext.url,
+              originalResponse: originalText,
+              rewrittenResponse: result.text
+            });
+          });
+
+          const headers = new Headers(response.headers);
+          headers.delete("content-length");
+
+          return new Response(result.text, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: headers
+          });
         });
       });
     };
@@ -440,6 +551,7 @@
 
     if (event.data.type === "SET_RULES") {
       activeRules = Array.isArray(event.data.rules) ? event.data.rules : [];
+      markRulesReady();
     }
   });
 

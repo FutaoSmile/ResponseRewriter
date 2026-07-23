@@ -768,6 +768,23 @@ h2 {
   align-items: end;
 }
 
+.match-config-grid {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.response-mode-field {
+  max-width: 320px;
+}
+
+.field-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -1971,9 +1988,14 @@ html[data-theme="dark"] .manager-rules .rule-item:hover {
   .rule-item,
   .log-item,
   .form-grid,
+  .match-config-grid,
   .stats-grid,
   .stats-box .stats-grid {
     grid-template-columns: 1fr;
+  }
+
+  .response-mode-field {
+    max-width: none;
   }
 
   .stats-panel .stats-grid {
