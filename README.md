@@ -131,7 +131,11 @@ node --test
 │   ├── background.js   # 打开管理页并更新扩展角标
 │   ├── content.js      # 连接扩展存储和页面注入脚本
 │   ├── injected.js     # 在页面上下文中拦截 XHR / Fetch
-│   └── ui              # 管理页面、弹窗及共享样式
+│   └── ui              # 管理页面和弹窗
+│       ├── i18n.js     # 多语言文案与翻译工具
+│       ├── rule-model.js # 规则标准化与校验
+│       ├── log-view.js # 日志列表与详情展示
+│       └── popup.js    # 页面状态和事件协调
 ├── examples            # 示例规则
 ├── docs                # 项目文档和审查记录
 └── test                # Node.js 单元测试

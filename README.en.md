@@ -131,7 +131,11 @@ node --test
 │   ├── background.js   # Opens manager page and updates extension badge
 │   ├── content.js      # Bridges extension storage and page-context script
 │   ├── injected.js     # Hooks XHR / Fetch in the page context
-│   └── ui              # Manager, popup, and shared styles
+│   └── ui              # Manager and popup pages
+│       ├── i18n.js     # Localized copy and translation helpers
+│       ├── rule-model.js # Rule normalization and validation
+│       ├── log-view.js # Log list and detail rendering
+│       └── popup.js    # Page state and event coordination
 ├── examples            # Example rules
 ├── docs                # Project documentation and review records
 └── test                # Node.js unit tests
