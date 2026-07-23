@@ -35,7 +35,7 @@ function refreshBadge() {
 
 chrome.action.onClicked.addListener(function () {
   chrome.tabs.create({
-    url: chrome.runtime.getURL("manager.html")
+    url: chrome.runtime.getURL("src/ui/manager.html")
   });
 });
 
@@ -45,7 +45,7 @@ chrome.runtime.onMessage.addListener(function (message) {
   }
 
   chrome.tabs.create({
-    url: chrome.runtime.getURL("manager.html")
+    url: chrome.runtime.getURL("src/ui/manager.html")
   });
 });
 

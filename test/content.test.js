@@ -4,7 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 
-const contentSource = fs.readFileSync(path.join(__dirname, "..", "content.js"), "utf8");
+const contentSource = fs.readFileSync(path.join(__dirname, "..", "src", "content.js"), "utf8");
 
 function normalizeRules(rules) {
   let postedMessage;

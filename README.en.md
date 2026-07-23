@@ -127,14 +127,13 @@ node --test
 ```text
 .
 ├── manifest.json       # Chrome extension manifest
-├── background.js       # Opens manager page and updates extension badge
-├── content.js          # Bridges extension storage and page-context script
-├── injected.js         # Hooks XHR / Fetch in the page context
-├── manager.html        # Main rule manager page
-├── popup.html          # Earlier popup UI
-├── popup.css           # Shared styles
-├── popup.js            # Manager UI logic and rule persistence
-├── sample-rules.json   # Example rule data
+├── src                 # Extension source code
+│   ├── background.js   # Opens manager page and updates extension badge
+│   ├── content.js      # Bridges extension storage and page-context script
+│   ├── injected.js     # Hooks XHR / Fetch in the page context
+│   └── ui              # Manager, popup, and shared styles
+├── examples            # Example rules
+├── docs                # Project documentation and review records
 └── test                # Node.js unit tests
 ```
 

@@ -127,14 +127,13 @@ node --test
 ```text
 .
 ├── manifest.json       # Chrome 扩展清单
-├── background.js       # 打开管理页并更新扩展角标
-├── content.js          # 连接扩展存储和页面注入脚本
-├── injected.js         # 在页面上下文中拦截 XHR / Fetch
-├── manager.html        # 主要规则管理页面
-├── popup.html          # 早期弹窗页面
-├── popup.css           # 共享样式
-├── popup.js            # 管理页交互逻辑和规则持久化
-├── sample-rules.json   # 示例规则数据
+├── src                 # 扩展源代码
+│   ├── background.js   # 打开管理页并更新扩展角标
+│   ├── content.js      # 连接扩展存储和页面注入脚本
+│   ├── injected.js     # 在页面上下文中拦截 XHR / Fetch
+│   └── ui              # 管理页面、弹窗及共享样式
+├── examples            # 示例规则
+├── docs                # 项目文档和审查记录
 └── test                # Node.js 单元测试
 ```
 
