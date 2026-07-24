@@ -88,6 +88,8 @@ Open an **Intercept Detail** from the intercept log or a rule's hit records:
 - JSON responses are formatted before comparison, so indentation-only changes are not reported as content changes.
 - Plain-text responses also support line-by-line comparison.
 
+Clearing statistics from a rule's **Hit Records** dialog requires confirmation.
+
 ### Complete Example Rule
 
 ```json

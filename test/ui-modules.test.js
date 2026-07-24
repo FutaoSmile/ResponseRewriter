@@ -52,6 +52,25 @@ test("every URL and response mode has localized guidance and an example", functi
   });
 });
 
+test("clearing hit statistics uses the localized in-app confirmation", function () {
+  const context = createUiContext();
+  const copy = JSON.parse(vm.runInContext(`
+    JSON.stringify(["zh-CN", "en", "ja", "ko"].map(function (locale) {
+      currentLocale = locale;
+      return [t("clearStatsConfirm"), t("clearStatsNote")];
+    }))
+  `, context));
+  const popupSource = fs.readFileSync(path.join(uiDirectory, "popup.js"), "utf8");
+
+  copy.flat().forEach(function (message) {
+    assert.notEqual(message.trim(), "");
+    assert.doesNotMatch(message, /^(clearStatsConfirm|clearStatsNote)$/);
+  });
+  assert.match(popupSource, /resetHitsStatsButton[\s\S]*openResetHitsConfirm\(\)/);
+  assert.match(popupSource, /confirmAction === "reset-hit-stats"[\s\S]*createEmptyStats\(\)/);
+  assert.doesNotMatch(popupSource, /window\.confirm\(t\("clearStatsConfirm"\)\)/);
+});
+
 test("rule form renders guidance targets for both mode selectors", function () {
   const managerSource = fs.readFileSync(path.join(uiDirectory, "manager.html"), "utf8");
 

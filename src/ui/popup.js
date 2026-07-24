@@ -23,6 +23,8 @@ const elements = {
   closeDeleteModalButton: document.getElementById("closeDeleteModalButton"),
   cancelDeleteButton: document.getElementById("cancelDeleteButton"),
   confirmDeleteButton: document.getElementById("confirmDeleteButton"),
+  confirmModalTitle: document.getElementById("confirmModalTitle"),
+  confirmModalNote: document.getElementById("confirmModalNote"),
   deleteModalText: document.getElementById("deleteModalText"),
   logModal: document.getElementById("logModal"),
   closeLogModalButton: document.getElementById("closeLogModalButton"),
@@ -420,6 +422,7 @@ function closeRuleModal() {
 }
 
 let confirmAction = "";
+let resetStatsReturnFocus = null;
 
 function openDeleteModal(rule) {
   deleteRuleId = rule.id;
@@ -437,12 +440,50 @@ function openClearLogsConfirm() {
   elements.deleteModal.setAttribute("aria-hidden", "false");
 }
 
+function openResetHitsConfirm() {
+  if (!hitsModalRuleId) return;
+  confirmAction = "reset-hit-stats";
+  resetStatsReturnFocus = document.activeElement;
+  elements.confirmModalTitle.dataset.i18n = "clearStats";
+  elements.confirmModalNote.dataset.i18n = "clearStatsNote";
+  elements.deleteModalText.dataset.i18n = "clearStatsConfirm";
+  elements.confirmDeleteButton.dataset.i18n = "clearStats";
+  elements.confirmModalTitle.textContent = t("clearStats");
+  elements.confirmModalNote.textContent = t("clearStatsNote");
+  elements.deleteModalText.textContent = t("clearStatsConfirm");
+  elements.confirmDeleteButton.textContent = t("clearStats");
+  // The hit records dialog stays visually behind the confirmation so cancel can
+  // return to it without rebuilding its expanded rows.
+  elements.hitsModal.setAttribute("aria-hidden", "true");
+  elements.deleteModal.classList.add("modal-confirm-above");
+  elements.deleteModal.classList.remove("hidden");
+  elements.deleteModal.setAttribute("aria-hidden", "false");
+  setTimeout(function () {
+    elements.cancelDeleteButton.focus();
+  }, 0);
+}
+
 function closeDeleteModal() {
+  var closedResetStatsConfirm = confirmAction === "reset-hit-stats";
   deleteRuleId = "";
   confirmAction = "";
-  elements.deleteModal.querySelector("h2").textContent = t("deleteRule");
+  elements.confirmModalTitle.dataset.i18n = "deleteRule";
+  elements.confirmModalNote.dataset.i18n = "deleteRuleNote";
+  elements.deleteModalText.dataset.i18n = "deleteRuleConfirm";
+  elements.confirmDeleteButton.dataset.i18n = "confirmDelete";
+  elements.confirmModalTitle.textContent = t("deleteRule");
+  elements.confirmModalNote.textContent = t("deleteRuleNote");
+  elements.confirmDeleteButton.textContent = t("confirmDelete");
+  elements.deleteModal.classList.remove("modal-confirm-above");
   elements.deleteModal.classList.add("hidden");
   elements.deleteModal.setAttribute("aria-hidden", "true");
+  if (elements.hitsModal && !elements.hitsModal.classList.contains("hidden")) {
+    elements.hitsModal.setAttribute("aria-hidden", "false");
+    if (closedResetStatsConfirm && resetStatsReturnFocus && resetStatsReturnFocus.isConnected) {
+      resetStatsReturnFocus.focus();
+    }
+  }
+  resetStatsReturnFocus = null;
 }
 
 /* Resizable — auto-injects handles on .modal-resizable cards */
@@ -564,15 +605,7 @@ if (elements.hitsList) {
 // Reset hits stats from hits modal
 if (elements.resetHitsStatsButton) {
   elements.resetHitsStatsButton.addEventListener("click", function () {
-    if (!hitsModalRuleId) return;
-    rules = rules.map(function (r) {
-      if (r.id !== hitsModalRuleId) return r;
-      var updated = clone(r);
-      updated.stats = createEmptyStats();
-      return updated;
-    });
-    saveRules(t("statsCleared"));
-    closeHitsModal();
+    openResetHitsConfirm();
   });
 }
 
@@ -852,6 +885,19 @@ elements.ruleForm.addEventListener("submit", function (event) {
 
 // Confirm delete
 elements.confirmDeleteButton.addEventListener("click", function () {
+  if (confirmAction === "reset-hit-stats") {
+    rules = rules.map(function (rule) {
+      if (rule.id !== hitsModalRuleId) return rule;
+      var updated = clone(rule);
+      updated.stats = createEmptyStats();
+      return updated;
+    });
+    saveRules(t("statsCleared"));
+    closeHitsModal();
+    closeDeleteModal();
+    return;
+  }
+
   if (confirmAction === "clear-logs") {
     logs = [];
     rules = rules.map(function (rule) {
