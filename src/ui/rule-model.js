@@ -73,6 +73,8 @@ function getExportRulesPayload() {
 
 
 function normalizeRule(rule, index) {
+  // Storage and imported files can contain pre-urlMode/pre-rewriteMode rules.
+  // Defaults preserve their historical exact-match and whole-body-replace behavior.
   const match = rule && rule.match && typeof rule.match === "object" ? rule.match : {};
   const rewrite = rule && rule.rewrite && typeof rule.rewrite === "object" ? rule.rewrite : {};
 

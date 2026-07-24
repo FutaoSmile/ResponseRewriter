@@ -1,4 +1,6 @@
 (function () {
+  // This file executes in the page world, not the extension's isolated content-script
+  // world. Keep extension API access in content.js and communicate through postMessage.
   const EXTENSION_SOURCE = "response-rewriter-extension";
   const PAGE_SOURCE = "response-rewriter-page";
   const TOAST_I18N = {
@@ -36,6 +38,9 @@
       return Promise.resolve();
     }
 
+    // Injection and storage reads race with requests fired during document_start.
+    // Fetch waits briefly for the first rule snapshot, but the timeout guarantees
+    // that a delayed extension message cannot stall the page's network calls forever.
     return new Promise(function (resolve) {
       var resolved = false;
       var timer = setTimeout(markRulesReady, RULES_READY_TIMEOUT);
@@ -78,6 +83,8 @@
 
     var actualText = String(actual || "").trim();
     var expectedText = String(expected || "").trim();
+    // Query parameters and fragments are deliberately ignored in every mode so
+    // cache-busting and tracking values do not make an otherwise stable rule miss.
     var comparableUrl = stripUrlSuffix(actualText);
     mode = mode || "exact";
 
@@ -89,6 +96,8 @@
       try {
         return new RegExp(expectedText).test(comparableUrl);
       } catch (e) {
+        // Imported rules can bypass the manager's validation. Invalid patterns must
+        // fail closed instead of breaking every request on the page.
         return false;
       }
     }
@@ -149,6 +158,8 @@
     var result = Object.assign({}, original);
 
     Object.keys(patch).forEach(function (key) {
+      // Never assign prototype-mutating keys from user-provided JSON. Besides the
+      // security risk, doing so could corrupt later rules in the same page context.
       if (key === "__proto__" || key === "constructor" || key === "prototype") {
         return;
       }
@@ -193,6 +204,9 @@
       }
 
       if (mode === "script") {
+        // new Function is intentional: transform bodies are user-authored rule data.
+        // Page CSP may reject dynamic evaluation, so the surrounding catch preserves
+        // the original response instead of failing the request.
         const transform = new Function("originalResponse", "context", body);
         return toResponseText(transform(originalText, {
           method: context.method,
@@ -241,6 +255,8 @@
     let currentText = context.responseText;
     const matchedRules = [];
 
+    // Matching rules run in list order and each rule receives the previous rule's
+    // output. This makes multiple enabled rules an explicit transformation pipeline.
     for (const rule of activeRules) {
       const nextContext = Object.assign({}, context, { responseText: currentText });
       if (!ruleApplies(rule, nextContext)) {
@@ -404,6 +420,8 @@
   }
 
   function patchXhr() {
+    // Save the native methods before patching so calls retain browser behavior,
+    // including overload handling via apply(arguments).
     const nativeOpen = XMLHttpRequest.prototype.open;
     const nativeSend = XMLHttpRequest.prototype.send;
 
@@ -420,6 +438,8 @@
       const xhr = this;
 
       if (!xhr.__interceptorBound) {
+        // XMLHttpRequest instances may be opened and sent more than once. Bind one
+        // listener per instance or every reuse would duplicate rewrites and hit logs.
         xhr.__interceptorBound = true;
 
         xhr.addEventListener("readystatechange", function () {
@@ -456,6 +476,8 @@
             });
           });
 
+          // response/responseText are read-only prototype accessors. Defining own
+          // properties shadows them for page code after readyState reaches DONE.
           Object.defineProperty(xhr, "responseText", {
             configurable: true,
             value: result.text
@@ -476,6 +498,9 @@
   }
 
   function patchFetch() {
+    // Fetch responses are immutable streams. Only clone and buffer the body when a
+    // rule can actually match; otherwise return the native response untouched so
+    // streaming consumers keep their original behavior.
     const nativeFetch = window.fetch;
 
     window.fetch = function (input, init) {
@@ -488,7 +513,8 @@
           return nativeFetch.apply(fetchThis, fetchArgs);
         }
 
-        // Check if any enabled rule could match — if not, use native fetch to preserve streaming
+        // URL/method matching does not require the body, so this preflight avoids
+        // buffering unrelated responses and preserves their streaming semantics.
         const couldMatch = activeRules.some(function (rule) {
           return ruleApplies(rule, {
             method: requestContext.method,
@@ -501,7 +527,7 @@
           return nativeFetch.apply(fetchThis, fetchArgs);
         }
 
-        // At least one rule matches — await full response so we can rewrite it
+        // clone() leaves the caller's response body unused while we read a copy.
         return nativeFetch.apply(fetchThis, fetchArgs).then(async function (response) {
           let originalText = "";
           try {
@@ -532,6 +558,8 @@
           });
 
           const headers = new Headers(response.headers);
+          // The rewritten UTF-8 byte length can differ from the server header.
+          // Let the browser calculate it rather than returning a stale value.
           headers.delete("content-length");
 
           return new Response(result.text, {
@@ -545,6 +573,8 @@
   }
 
   window.addEventListener("message", function (event) {
+    // Only accept rule snapshots sent by our isolated-world bridge; arbitrary page
+    // messages must not be able to replace the active rule set.
     if (event.source !== window || !event.data || event.data.source !== EXTENSION_SOURCE) {
       return;
     }

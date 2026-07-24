@@ -156,6 +156,8 @@ function formatResponseForDiff(value) {
   var trimmed = text.trim();
   if (/^[\[{]/.test(trimmed)) {
     try {
+      // Canonical formatting prevents indentation-only JSON differences from being
+      // highlighted as response changes.
       return JSON.stringify(JSON.parse(trimmed), null, 2);
     } catch (error) {
       // Fall through and compare the original text.
@@ -171,6 +173,8 @@ function createLineDiff(original, rewritten) {
   var addedCount = 0;
   var removedCount = 0;
 
+  // LCS uses O(left * right) memory and time. Large, line-heavy responses fall back
+  // to positional comparison so opening a detail modal cannot freeze the manager.
   if (originalLines.length * rewrittenLines.length > 640000) {
     var maxLength = Math.max(originalLines.length, rewrittenLines.length);
     for (var lineIndex = 0; lineIndex < maxLength; lineIndex += 1) {
@@ -190,6 +194,8 @@ function createLineDiff(original, rewritten) {
     return { rows: rows, addedCount: addedCount, removedCount: removedCount };
   }
 
+  // Build a longest-common-subsequence matrix. Uint16Array keeps this bounded diff
+  // substantially smaller than a matrix of regular JavaScript numbers.
   var matrix = Array.from({ length: originalLines.length + 1 }, function () {
     return new Uint16Array(rewrittenLines.length + 1);
   });
@@ -204,6 +210,8 @@ function createLineDiff(original, rewritten) {
     }
   }
 
+  // Walk the matrix to recover equal/add/remove operations and their original line
+  // numbers. Counts are based on operations, not rendered alignment rows.
   var operations = [];
   originalIndex = 0;
   rewrittenIndex = 0;
@@ -249,6 +257,8 @@ function createLineDiff(original, rewritten) {
   var removedLines = [];
   var addedLines = [];
   function flushChangedLines() {
+    // Pair adjacent removals and additions into the same visual row. This turns a
+    // changed JSON property into an intuitive left-versus-right comparison.
     var count = Math.max(removedLines.length, addedLines.length);
     for (var index = 0; index < count; index += 1) {
       var removed = removedLines[index] || null;
@@ -290,6 +300,7 @@ function createLineDiff(original, rewritten) {
 
 function renderDiffCell(side, text, lineNumber, changed) {
   var stateClass = text === null ? " is-empty" : (changed ? " is-" + side : "");
+  // Response data is untrusted page content; escape it before inserting the diff HTML.
   return '<div class="diff-cell' + stateClass + '" role="cell">' +
     '<span class="diff-line-number">' + (lineNumber === null ? "" : lineNumber) + '</span>' +
     '<code>' + (text === null ? "" : escapeHtml(text || " ")) + '</code>' +

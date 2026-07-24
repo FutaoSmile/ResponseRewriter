@@ -1,4 +1,6 @@
 (function () {
+  // Content scripts run in Chrome's isolated world. The interceptor must be injected
+  // into the page world to replace that page's XMLHttpRequest and fetch functions.
   const SOURCE = "response-rewriter-extension";
   const PAGE_SOURCE = "response-rewriter-page";
   const MAX_LOGS = 100;
@@ -9,6 +11,8 @@
   }
 
   function normalizeRule(rule, index) {
+    // Rules may come from older storage/export formats. Normalize at the bridge so
+    // the page-world interceptor only needs to handle one stable rule shape.
     const match = rule && rule.match && typeof rule.match === "object" ? rule.match : {};
     const rewrite = rule && rule.rewrite && typeof rule.rewrite === "object" ? rule.rewrite : {};
 
@@ -54,10 +58,15 @@
       return value;
     }
 
+    // Logs live in chrome.storage.local and are rendered in the manager. Bounding
+    // each response prevents a few large API calls from exhausting storage or UI memory.
     return value.slice(0, MAX_RESPONSE_LENGTH) + "\n\n[truncated]";
   }
 
   function injectPageScript() {
+    // A script element loaded from the extension is the MV3-compatible way to cross
+    // the isolated-world boundary; importing this file in the content script would
+    // patch the wrong global objects.
     const script = document.createElement("script");
     script.src = chrome.runtime.getURL("src/injected.js");
     script.onload = function () {
@@ -67,6 +76,9 @@
   }
 
   function sendRulesToPage(rules) {
+    // window.postMessage is used because extension APIs are unavailable in the page
+    // world. SOURCE is checked by the receiver since "*" is required for same-window
+    // pages whose origin may vary during document_start.
     window.postMessage(
       {
         source: SOURCE,
@@ -89,6 +101,8 @@
       return;
     }
 
+    // Keep statistics and the corresponding log entry in one storage write so the
+    // manager never observes a hit count without its detail record (or vice versa).
     chrome.storage.local.get({ rules: [], logs: [] }, function (result) {
       const rules = normalizeRules(result.rules);
       const matchedRule = rules.find(function (rule) {
@@ -143,6 +157,8 @@
   });
 
   window.addEventListener("message", function (event) {
+    // Page scripts can also call postMessage. Validate both the window and the
+    // private source marker before treating a message as extension data.
     if (event.source !== window || !event.data || event.data.source !== PAGE_SOURCE) {
       return;
     }
