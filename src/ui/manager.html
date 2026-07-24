@@ -147,6 +147,13 @@
               <input id="urlMatchValue" type="text" placeholder="https://example.com/api/user/profile" data-i18n-placeholder="urlMatchPlaceholder">
             </label>
           </div>
+          <div class="field-guidance" aria-live="polite">
+            <small id="urlMatchModeHint" class="field-hint"></small>
+            <div class="field-example">
+              <span data-i18n="exampleLabel">示例</span>
+              <code id="urlMatchModeExample"></code>
+            </div>
+          </div>
 
           <label class="field response-mode-field">
             <span data-i18n="rewriteMode">响应处理方式</span>
@@ -155,8 +162,14 @@
               <option value="json-merge" data-i18n="rewriteModeJsonMerge">JSON 局部合并</option>
               <option value="script" data-i18n="rewriteModeScript">JavaScript 转换</option>
             </select>
-            <small id="rewriteModeHint" class="field-hint"></small>
           </label>
+          <div class="field-guidance" aria-live="polite">
+            <small id="rewriteModeHint" class="field-hint"></small>
+            <div class="field-example">
+              <span data-i18n="exampleLabel">示例</span>
+              <code id="rewriteModeExample"></code>
+            </div>
+          </div>
           <label class="field">
             <span id="responseBodyLabel" data-i18n="responseBody">返回内容</span>
             <div class="textarea-action-wrap">

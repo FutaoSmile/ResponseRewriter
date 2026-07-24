@@ -151,33 +151,178 @@ function renderLogList() {
    ================================================================ */
 
 
-function highlightJson(text) {
-  if (!text) return "";
+function formatResponseForDiff(value) {
+  var text = typeof value === "string" ? value : "";
   var trimmed = text.trim();
-  if (!/^[\[{]/.test(trimmed)) return escapeHtml(text);
-  try {
-    var parsed = JSON.parse(trimmed);
-    var formatted = JSON.stringify(parsed, null, 2);
-    return formatted
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/("(?:\\.|[^"\\])*?")\s*:/g, '<span class="hl-key">$1</span>:')
-      .replace(/:\s*("(?:\\.|[^"\\])*?")/g, ': <span class="hl-string">$1</span>')
-      .replace(/:\s*(true|false)\b/g, ': <span class="hl-bool">$1</span>')
-      .replace(/:\s*(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b/g, ': <span class="hl-num">$1</span>')
-      .replace(/:\s*(null)\b/g, ': <span class="hl-null">$1</span>');
-  } catch (e) {
-    return escapeHtml(text);
+  if (/^[\[{]/.test(trimmed)) {
+    try {
+      return JSON.stringify(JSON.parse(trimmed), null, 2);
+    } catch (error) {
+      // Fall through and compare the original text.
+    }
   }
+  return text.replace(/\r\n?/g, "\n");
+}
+
+function createLineDiff(original, rewritten) {
+  var originalLines = formatResponseForDiff(original).split("\n");
+  var rewrittenLines = formatResponseForDiff(rewritten).split("\n");
+  var rows = [];
+  var addedCount = 0;
+  var removedCount = 0;
+
+  if (originalLines.length * rewrittenLines.length > 640000) {
+    var maxLength = Math.max(originalLines.length, rewrittenLines.length);
+    for (var lineIndex = 0; lineIndex < maxLength; lineIndex += 1) {
+      var originalLine = lineIndex < originalLines.length ? originalLines[lineIndex] : null;
+      var rewrittenLine = lineIndex < rewrittenLines.length ? rewrittenLines[lineIndex] : null;
+      var unchanged = originalLine !== null && originalLine === rewrittenLine;
+      if (!unchanged && originalLine !== null) removedCount += 1;
+      if (!unchanged && rewrittenLine !== null) addedCount += 1;
+      rows.push({
+        original: originalLine,
+        originalNumber: originalLine === null ? null : lineIndex + 1,
+        rewritten: rewrittenLine,
+        rewrittenNumber: rewrittenLine === null ? null : lineIndex + 1,
+        changed: !unchanged
+      });
+    }
+    return { rows: rows, addedCount: addedCount, removedCount: removedCount };
+  }
+
+  var matrix = Array.from({ length: originalLines.length + 1 }, function () {
+    return new Uint16Array(rewrittenLines.length + 1);
+  });
+  var originalIndex;
+  var rewrittenIndex;
+
+  for (originalIndex = originalLines.length - 1; originalIndex >= 0; originalIndex -= 1) {
+    for (rewrittenIndex = rewrittenLines.length - 1; rewrittenIndex >= 0; rewrittenIndex -= 1) {
+      matrix[originalIndex][rewrittenIndex] = originalLines[originalIndex] === rewrittenLines[rewrittenIndex]
+        ? matrix[originalIndex + 1][rewrittenIndex + 1] + 1
+        : Math.max(matrix[originalIndex + 1][rewrittenIndex], matrix[originalIndex][rewrittenIndex + 1]);
+    }
+  }
+
+  var operations = [];
+  originalIndex = 0;
+  rewrittenIndex = 0;
+  while (originalIndex < originalLines.length || rewrittenIndex < rewrittenLines.length) {
+    if (
+      originalIndex < originalLines.length &&
+      rewrittenIndex < rewrittenLines.length &&
+      originalLines[originalIndex] === rewrittenLines[rewrittenIndex]
+    ) {
+      operations.push({
+        type: "equal",
+        text: originalLines[originalIndex],
+        originalNumber: originalIndex + 1,
+        rewrittenNumber: rewrittenIndex + 1
+      });
+      originalIndex += 1;
+      rewrittenIndex += 1;
+    } else if (
+      originalIndex < originalLines.length &&
+      (
+        rewrittenIndex >= rewrittenLines.length ||
+        matrix[originalIndex + 1][rewrittenIndex] >= matrix[originalIndex][rewrittenIndex + 1]
+      )
+    ) {
+      operations.push({
+        type: "remove",
+        text: originalLines[originalIndex],
+        originalNumber: originalIndex + 1
+      });
+      originalIndex += 1;
+      removedCount += 1;
+    } else {
+      operations.push({
+        type: "add",
+        text: rewrittenLines[rewrittenIndex],
+        rewrittenNumber: rewrittenIndex + 1
+      });
+      rewrittenIndex += 1;
+      addedCount += 1;
+    }
+  }
+
+  var removedLines = [];
+  var addedLines = [];
+  function flushChangedLines() {
+    var count = Math.max(removedLines.length, addedLines.length);
+    for (var index = 0; index < count; index += 1) {
+      var removed = removedLines[index] || null;
+      var added = addedLines[index] || null;
+      rows.push({
+        original: removed ? removed.text : null,
+        originalNumber: removed ? removed.originalNumber : null,
+        rewritten: added ? added.text : null,
+        rewrittenNumber: added ? added.rewrittenNumber : null,
+        changed: true
+      });
+    }
+    removedLines = [];
+    addedLines = [];
+  }
+
+  operations.forEach(function (operation) {
+    if (operation.type === "remove") {
+      removedLines.push(operation);
+      return;
+    }
+    if (operation.type === "add") {
+      addedLines.push(operation);
+      return;
+    }
+    flushChangedLines();
+    rows.push({
+      original: operation.text,
+      originalNumber: operation.originalNumber,
+      rewritten: operation.text,
+      rewrittenNumber: operation.rewrittenNumber,
+      changed: false
+    });
+  });
+  flushChangedLines();
+
+  return { rows: rows, addedCount: addedCount, removedCount: removedCount };
+}
+
+function renderDiffCell(side, text, lineNumber, changed) {
+  var stateClass = text === null ? " is-empty" : (changed ? " is-" + side : "");
+  return '<div class="diff-cell' + stateClass + '" role="cell">' +
+    '<span class="diff-line-number">' + (lineNumber === null ? "" : lineNumber) + '</span>' +
+    '<code>' + (text === null ? "" : escapeHtml(text || " ")) + '</code>' +
+    '</div>';
 }
 
 /* Shared log detail renderer — used by log modal & hits modal */
 function renderLogDetailHTML(original, rewritten) {
-  return '<div class="log-detail-grid">' +
-    '<section class="detail-block"><h3>' + t("originalResponse") + '</h3><pre class="detail-response">' + highlightJson(original || "") + '</pre></section>' +
-    '<section class="detail-block"><h3>' + t("rewrittenResponse") + '</h3><pre class="detail-response">' + highlightJson(rewritten || "") + '</pre></section>' +
-    '</div>';
+  var diff = createLineDiff(original, rewritten);
+  var hasChanges = diff.addedCount > 0 || diff.removedCount > 0;
+  var rows = diff.rows.map(function (row) {
+    return '<div class="diff-row' + (row.changed ? " is-changed" : "") + '" role="row">' +
+      renderDiffCell("removed", row.original, row.originalNumber, row.changed) +
+      renderDiffCell("added", row.rewritten, row.rewrittenNumber, row.changed) +
+      '</div>';
+  }).join("");
+
+  return '<section class="response-diff" data-log-detail>' +
+    '<div class="diff-summary">' +
+      '<strong>' + t(hasChanges ? "diffChanged" : "diffNoChanges") + '</strong>' +
+      '<div class="diff-stats">' +
+        '<span class="diff-stat is-removed">' + t("diffRemoved", { count: diff.removedCount }) + '</span>' +
+        '<span class="diff-stat is-added">' + t("diffAdded", { count: diff.addedCount }) + '</span>' +
+      '</div>' +
+    '</div>' +
+    '<div class="diff-table" role="table">' +
+      '<div class="diff-columns" role="row">' +
+        '<div role="columnheader">' + t("originalResponse") + '</div>' +
+        '<div role="columnheader">' + t("rewrittenResponse") + '</div>' +
+      '</div>' +
+      rows +
+    '</div>' +
+    '</section>';
 }
 
 function openLogModal(log) {
@@ -192,8 +337,8 @@ function openLogModal(log) {
     elements.logMetaText.textContent =
       [formatDate(log.matchedAt), log.method || "-", log.url || "-", log.resourceType || "-"].join(" | ");
   }
-  var logGrid = elements.logModal.querySelector(".log-detail-grid");
-  if (logGrid) logGrid.remove();
+  var currentDetail = elements.logModal.querySelector("[data-log-detail]");
+  if (currentDetail) currentDetail.remove();
   elements.logModal.querySelector(".modal-card").insertAdjacentHTML("beforeend", renderLogDetailHTML(log.originalResponse, log.rewrittenResponse));
   elements.logModal.classList.remove("hidden");
   elements.logModal.setAttribute("aria-hidden", "false");

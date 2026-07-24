@@ -53,17 +53,24 @@ It is designed for local development, debugging, frontend integration testing, m
 
 ### URL Match Modes
 
-- **Exact** (`urlMode: "exact"`): Matches by URL origin and path. Values beginning with `/` compare only the path.
-- **Contains** (`urlMode: "contains"`): Matches when the URL contains the configured text.
-- **Regular expression** (`urlMode: "regex"`): Uses JavaScript `RegExp` for dynamic paths, such as `/api/users/\d+$`.
+| Mode | Value example | Matches |
+| --- | --- | --- |
+| **Exact** (`exact`) | `/api/users/42` | Only the `/api/users/42` path |
+| **Contains** (`contains`) | `/api/users/` | URLs containing that segment, such as `/api/users/42` and `/api/users/profile` |
+| **Regular expression** (`regex`) | `^https://api\.example\.com/users/\d+$` | Full dynamic URLs with a numeric user ID; omit surrounding `/` characters |
 
 All three modes remove query parameters and URL fragments before matching.
 
 ### Response Modes
 
-- **Replace entire body** (`mode: "replace"`): Replaces the full response with the configured content. Existing rules default to this mode.
-- **Merge JSON** (`mode: "json-merge"`): Recursively merges the original response and configured JSON objects. Nested objects are merged; arrays and primitive values are replaced.
-- **JavaScript transform** (`mode: "script"`): Runs a transform script with these parameters:
+| Mode | Value example | Use when |
+| --- | --- | --- |
+| **Replace entire body** (`replace`) | `{"code":0,"data":{"name":"Mock"}}` | The original response should be completely replaced with fixed content |
+| **Merge JSON** (`json-merge`) | `{"data":{"role":"admin"}}` | Only selected JSON fields should change while other fields remain |
+| **JavaScript transform** (`script`) | `const data = JSON.parse(originalResponse);`<br>`data.role = "admin";`<br>`return data;` | The result must be calculated from the original response or request context |
+
+JavaScript transforms receive these parameters:
+
   - `originalResponse`: the current response text.
   - `context.method`: the request method.
   - `context.url`: the request URL.
@@ -71,7 +78,7 @@ All three modes remove query parameters and URL fragments before matching.
 
 JavaScript transforms may return a string or JSON value. If a transform throws, the original response is preserved and the error is written to the page console.
 
-### Example Rule
+### Complete Example Rule
 
 ```json
 {

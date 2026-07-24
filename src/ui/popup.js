@@ -33,8 +33,11 @@ const elements = {
   matchMethod: document.getElementById("matchMethod"),
   urlMatchMode: document.getElementById("urlMatchMode"),
   urlMatchValue: document.getElementById("urlMatchValue"),
+  urlMatchModeHint: document.getElementById("urlMatchModeHint"),
+  urlMatchModeExample: document.getElementById("urlMatchModeExample"),
   rewriteMode: document.getElementById("rewriteMode"),
   rewriteModeHint: document.getElementById("rewriteModeHint"),
+  rewriteModeExample: document.getElementById("rewriteModeExample"),
   responseBodyLabel: document.getElementById("responseBodyLabel"),
   rewriteBody: document.getElementById("rewriteBody"),
   formatRewriteBodyButton: document.getElementById("formatRewriteBodyButton"),
@@ -105,6 +108,7 @@ function applyLocale() {
     localeSelect.value = currentLocale;
   }
 
+  updateUrlMatchModeUi();
   updateRewriteModeUi();
   renderRuleList();
   renderLogList();
@@ -348,6 +352,7 @@ function fillRuleForm(rule) {
   if (elements.rewriteBody) {
     elements.rewriteBody.value = rule.rewrite.body;
   }
+  updateUrlMatchModeUi();
   updateRewriteModeUi();
 }
 
@@ -355,9 +360,7 @@ function updateRewriteModeUi() {
   if (!elements.rewriteMode || !elements.rewriteBody) return;
 
   var mode = elements.rewriteMode.value;
-  var hintKey = mode === "json-merge"
-    ? "rewriteHintJsonMerge"
-    : (mode === "script" ? "rewriteHintScript" : "rewriteHintReplace");
+  var guide = getRewriteModeGuide(mode);
   var labelKey = mode === "json-merge"
     ? "responseBodyMerge"
     : (mode === "script" ? "responseBodyScript" : "responseBody");
@@ -366,7 +369,10 @@ function updateRewriteModeUi() {
     : (mode === "script" ? "responseBodyScriptPlaceholder" : "responseBodyPlaceholder");
 
   if (elements.rewriteModeHint) {
-    elements.rewriteModeHint.textContent = t(hintKey);
+    elements.rewriteModeHint.textContent = guide.hint;
+  }
+  if (elements.rewriteModeExample) {
+    elements.rewriteModeExample.textContent = guide.example;
   }
   if (elements.responseBodyLabel) {
     elements.responseBodyLabel.textContent = t(labelKey);
@@ -374,6 +380,18 @@ function updateRewriteModeUi() {
   elements.rewriteBody.placeholder = t(placeholderKey);
   if (elements.formatRewriteBodyButton) {
     elements.formatRewriteBodyButton.hidden = mode === "script";
+  }
+}
+
+function updateUrlMatchModeUi() {
+  if (!elements.urlMatchMode) return;
+
+  var guide = getUrlModeGuide(elements.urlMatchMode.value);
+  if (elements.urlMatchModeHint) {
+    elements.urlMatchModeHint.textContent = guide.hint;
+  }
+  if (elements.urlMatchModeExample) {
+    elements.urlMatchModeExample.textContent = guide.example;
   }
 }
 
@@ -687,6 +705,10 @@ if (elements.formatRewriteBodyButton) {
 
 if (elements.rewriteMode) {
   elements.rewriteMode.addEventListener("change", updateRewriteModeUi);
+}
+
+if (elements.urlMatchMode) {
+  elements.urlMatchMode.addEventListener("change", updateUrlMatchModeUi);
 }
 
 if (elements.importRulesButton && elements.importRulesFile) {

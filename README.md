@@ -53,17 +53,24 @@ ResponseRewriter 是一个 Chrome Manifest V3 扩展。它会在页面上下文�
 
 ### URL 匹配方式
 
-- **精确匹配**（`urlMode: "exact"`）：按 URL 来源和路径匹配；以 `/` 开头时只比较路径。
-- **包含匹配**（`urlMode: "contains"`）：URL 中包含指定文本时命中。
-- **正则匹配**（`urlMode: "regex"`）：使用 JavaScript `RegExp` 匹配动态路径，例如 `/api/users/\d+$`。
+| 方式 | 填写示例 | 会匹配 |
+| --- | --- | --- |
+| **精确匹配**（`exact`） | `/api/users/42` | 只匹配路径 `/api/users/42` |
+| **包含匹配**（`contains`） | `/api/users/` | `/api/users/42`、`/api/users/profile` 等包含该片段的 URL |
+| **正则匹配**（`regex`） | `^https://api\.example\.com/users/\d+$` | 用户 ID 为数字的动态完整 URL；填写时不要添加两侧的 `/` |
 
 三种模式都会先移除查询参数和哈希片段再进行匹配。
 
 ### 响应处理方式
 
-- **整段替换**（`mode: "replace"`）：使用规则中的内容替换整个响应体。旧规则默认使用此模式。
-- **JSON 局部合并**（`mode: "json-merge"`）：递归合并原响应与规则中的 JSON 对象；嵌套对象会合并，数组和普通值会替换。
-- **JavaScript 转换**（`mode: "script"`）：执行转换脚本。脚本可以使用以下参数：
+| 方式 | 填写示例 | 适用场景 |
+| --- | --- | --- |
+| **整段替换**（`replace`） | `{"code":0,"data":{"name":"Mock"}}` | 完全忽略原响应，返回固定内容 |
+| **JSON 局部合并**（`json-merge`） | `{"data":{"role":"admin"}}` | 只修改指定 JSON 字段，保留原响应的其他字段 |
+| **JavaScript 转换**（`script`） | `const data = JSON.parse(originalResponse);`<br>`data.role = "admin";`<br>`return data;` | 根据原响应或请求信息动态计算结果 |
+
+JavaScript 转换脚本可以使用以下参数：
+
   - `originalResponse`：当前响应文本。
   - `context.method`：请求方法。
   - `context.url`：请求 URL。
@@ -71,7 +78,7 @@ ResponseRewriter 是一个 Chrome Manifest V3 扩展。它会在页面上下文�
 
 JavaScript 脚本可以返回字符串或 JSON 值。转换报错时会保留原响应，并在页面控制台输出错误。
 
-### 示例规则
+### 完整示例规则
 
 ```json
 {
