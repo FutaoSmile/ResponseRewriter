@@ -27,7 +27,7 @@ It is designed for local development, debugging, frontend integration testing, m
 - **Multiple response modes**: Replace the whole body, merge JSON objects, or run a JavaScript transform.
 - **Live rule sync**: Saved rules are synchronized to opened pages immediately.
 - **Hit statistics**: Track hit count, last matched URL, matched time, and resource type.
-- **Intercept logs**: View original and rewritten responses for each hit.
+- **Response diff view**: Align original and rewritten responses by line and highlight additions, removals, and replacements.
 - **Multilingual UI**: Supports Chinese, English, Japanese, and Korean.
 - **Theme switching**: Supports light and dark themes.
 - **No build step**: Plain HTML, CSS, and JavaScript. Load it directly as an unpacked Chrome extension.
@@ -49,7 +49,7 @@ It is designed for local development, debugging, frontend integration testing, m
 4. Enter the URL match value and response content or transform script.
 5. Save the rule.
 6. Refresh or continue using the target page. Matching XHR / Fetch responses will be rewritten.
-7. Check hit counts and logs in the manager page.
+7. Check hit counts and logs in the manager page. Open an intercept detail to compare the response before and after rewriting.
 
 ### URL Match Modes
 
@@ -77,6 +77,16 @@ JavaScript transforms receive these parameters:
   - `context.resourceType`: `xhr` or `fetch`.
 
 JavaScript transforms may return a string or JSON value. If a transform throws, the original response is preserved and the error is written to the page console.
+
+### Viewing Response Differences
+
+Open an **Intercept Detail** from the intercept log or a rule's hit records:
+
+- The original response appears on the left and the rewritten response on the right with aligned line numbers.
+- Removed or replaced lines are marked in red; added lines are marked in green.
+- The header shows added and removed line counts, while unchanged content is visually de-emphasized.
+- JSON responses are formatted before comparison, so indentation-only changes are not reported as content changes.
+- Plain-text responses also support line-by-line comparison.
 
 ### Complete Example Rule
 
