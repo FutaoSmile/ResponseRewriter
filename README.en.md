@@ -26,7 +26,7 @@ It is designed for local development, debugging, frontend integration testing, m
 - **Multiple URL match modes**: Use exact, substring, or regular-expression matching while ignoring query parameters.
 - **Multiple response modes**: Replace the whole body, merge JSON objects, or run a JavaScript transform.
 - **Live rule sync**: Saved rules are synchronized to opened pages immediately.
-- **Hit statistics**: Track hit count, last matched URL, matched time, and resource type.
+- **Hit statistics**: Count each rule's hits from its currently retained intercept logs, and track the last matched URL, matched time, and resource type.
 - **Response diff view**: Align original and rewritten responses by line and highlight additions, removals, and replacements.
 - **Multilingual UI**: Supports Chinese, English, Japanese, and Korean.
 - **Theme switching**: Supports light and dark themes.
@@ -88,7 +88,7 @@ Open an **Intercept Detail** from the intercept log or a rule's hit records:
 - JSON responses are formatted before comparison, so indentation-only changes are not reported as content changes.
 - Plain-text responses also support line-by-line comparison.
 
-Clearing statistics from a rule's **Hit Records** dialog requires confirmation.
+Clearing records from a rule's **Hit Records** dialog requires confirmation. Once confirmed, the rule's intercept logs are deleted and its hit count returns to zero.
 
 ### Complete Example Rule
 

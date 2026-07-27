@@ -52,7 +52,7 @@ test("every URL and response mode has localized guidance and an example", functi
   });
 });
 
-test("clearing hit statistics uses the localized in-app confirmation", function () {
+test("clearing hit records deletes the matching logs and uses the localized confirmation", function () {
   const context = createUiContext();
   const copy = JSON.parse(vm.runInContext(`
     JSON.stringify(["zh-CN", "en", "ja", "ko"].map(function (locale) {
@@ -67,8 +67,25 @@ test("clearing hit statistics uses the localized in-app confirmation", function 
     assert.doesNotMatch(message, /^(clearStatsConfirm|clearStatsNote)$/);
   });
   assert.match(popupSource, /resetHitsStatsButton[\s\S]*openResetHitsConfirm\(\)/);
-  assert.match(popupSource, /confirmAction === "reset-hit-stats"[\s\S]*createEmptyStats\(\)/);
+  assert.match(popupSource, /confirmAction === "reset-hit-stats"[\s\S]*log\.ruleId !== hitsModalRuleId[\s\S]*createEmptyStats\(\)/);
+  assert.match(popupSource, /chrome\.storage\.local\.set\(\{ rules: rules, logs: logs \}/);
   assert.doesNotMatch(popupSource, /window\.confirm\(t\("clearStatsConfirm"\)\)/);
+});
+
+test("rule hit counts use the currently retained logs", function () {
+  const context = createUiContext();
+  const count = vm.runInContext(`
+    getRuleLogs([
+      { ruleId: "rule-a" },
+      { ruleId: "rule-b" },
+      { ruleId: "rule-a" }
+    ], "rule-a").length
+  `, context);
+  const popupSource = fs.readFileSync(path.join(uiDirectory, "popup.js"), "utf8");
+
+  assert.equal(count, 2);
+  assert.match(popupSource, /var hitCount = getRuleLogs\(logs, rule\.id\)\.length/);
+  assert.match(popupSource, /if \(changes\.logs\)[\s\S]*renderRuleList\(\)/);
 });
 
 test("rule form renders guidance targets for both mode selectors", function () {

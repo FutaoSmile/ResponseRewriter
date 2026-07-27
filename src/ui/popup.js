@@ -295,6 +295,7 @@ function renderRuleList() {
     var urlModeLabel = rule.match.urlMode === "contains"
       ? t("urlModeContains")
       : (rule.match.urlMode === "regex" ? t("urlModeRegex") : t("urlModeExact"));
+    var hitCount = getRuleLogs(logs, rule.id).length;
     var item = document.createElement("div");
     item.className = "rule-item";
     item.style.animationDelay = (index * 0.04) + "s";
@@ -304,7 +305,7 @@ function renderRuleList() {
       '<span class="rule-meta" title="' + escapeHtml(urlModeLabel) + '">' +
         escapeHtml(urlModeLabel + " · " + (rule.match.url || t("unset"))) +
       '</span>' +
-      '<span><span class="badge hit-badge ' + (rule.stats.hitCount > 0 ? "hit" : "miss") + '" data-action="view-hits" data-rule-id="' + rule.id + '">' + String(rule.stats.hitCount) + '</span></span>' +
+      '<span><span class="badge hit-badge ' + (hitCount > 0 ? "hit" : "miss") + '" data-action="view-hits" data-rule-id="' + rule.id + '">' + String(hitCount) + '</span></span>' +
       '<span>' +
         '<label class="switch list-switch">' +
           '<input type="checkbox" ' + (rule.enabled ? "checked" : "") + ' data-action="toggle-enabled" data-rule-id="' + rule.id + '">' +
@@ -544,7 +545,7 @@ function openHitsModal(rule) {
   if (!elements.hitsModal) return;
   hitsModalRuleId = rule.id;
   elements.hitsModalTitle.textContent = t("hitRecordsTitle", { name: rule.name });
-  var ruleLogs = logs.filter(function (l) { return l.ruleId === rule.id; });
+  var ruleLogs = getRuleLogs(logs, rule.id);
   elements.hitsList.innerHTML = "";
   if (!ruleLogs.length) {
     elements.hitsList.innerHTML = '<div class="empty-state">' + t("noHitRecords") + '</div>';
@@ -560,10 +561,11 @@ function openHitsModal(rule) {
           '<span>' + escapeHtml(l.method || "-") + '</span>' +
           '<span class="hit-url" title="' + escapeHtml(l.url) + '">' + escapeHtml(l.url || "-") + '</span>' +
           '<span>' + escapeHtml(l.resourceType || "-") + '</span>' +
+          renderLogOutcomeBadge(l) +
         '</div>';
       var detail = document.createElement("div");
       detail.className = "hit-detail hidden";
-      detail.innerHTML = renderLogDetailHTML(l.originalResponse, l.rewrittenResponse);
+      detail.innerHTML = renderLogDetailHTML(l.originalResponse, l.rewrittenResponse, l.outcome);
       row.appendChild(detail);
       elements.hitsList.appendChild(row);
     });
@@ -886,13 +888,20 @@ elements.ruleForm.addEventListener("submit", function (event) {
 // Confirm delete
 elements.confirmDeleteButton.addEventListener("click", function () {
   if (confirmAction === "reset-hit-stats") {
+    logs = logs.filter(function (log) {
+      return log.ruleId !== hitsModalRuleId;
+    });
     rules = rules.map(function (rule) {
       if (rule.id !== hitsModalRuleId) return rule;
       var updated = clone(rule);
       updated.stats = createEmptyStats();
       return updated;
     });
-    saveRules(t("statsCleared"));
+    chrome.storage.local.set({ rules: rules, logs: logs }, function () {
+      renderRuleList();
+      renderLogList();
+      setStatus(t("statsCleared"));
+    });
     closeHitsModal();
     closeDeleteModal();
     return;
@@ -970,6 +979,7 @@ chrome.storage.onChanged.addListener(function (changes, areaName) {
   if (changes.logs) {
     logs = Array.isArray(changes.logs.newValue) ? changes.logs.newValue : [];
     logPage = Math.min(logPage, Math.max(1, Math.ceil(getFilteredLogs().length / LOGS_PAGE_SIZE)));
+    renderRuleList();
     renderLogList();
   }
 });

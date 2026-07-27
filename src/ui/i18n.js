@@ -81,9 +81,9 @@ const I18N = {
     confirmDelete: "确认删除",
     logDetail: "拦截详情",
     hitRecords: "命中记录",
-    clearStats: "清空统计",
-    clearStatsConfirm: "确定清空当前规则的命中统计吗？此操作不可恢复。",
-    clearStatsNote: "仅清空命中次数，已有拦截日志会保留。",
+    clearStats: "清空记录",
+    clearStatsConfirm: "确定清空当前规则的命中记录吗？此操作不可恢复。",
+    clearStatsNote: "该规则已有的拦截日志将被删除，命中次数将归零。",
     newRule: "新规则",
     unnamedRule: "未命名规则",
     pageInfo: "第 {page} / {totalPages} 页，共 {totalItems} 条",
@@ -126,7 +126,7 @@ const I18N = {
     logsCleared: "日志和命中统计已清空。",
     deleteFailed: "删除失败: {message}",
     ruleDeleted: "规则已删除。",
-    statsCleared: "统计已清空。"
+    statsCleared: "命中记录已清空。"
   },
   en: {
     appTitle: "ResponseRewriter",
@@ -207,9 +207,9 @@ const I18N = {
     confirmDelete: "Delete",
     logDetail: "Intercept Detail",
     hitRecords: "Hit Records",
-    clearStats: "Clear Stats",
-    clearStatsConfirm: "Clear hit statistics for this rule? This cannot be undone.",
-    clearStatsNote: "Only hit counts are cleared. Existing intercept logs are kept.",
+    clearStats: "Clear Records",
+    clearStatsConfirm: "Clear hit records for this rule? This cannot be undone.",
+    clearStatsNote: "Existing intercept logs for this rule will be deleted and its hit count will return to zero.",
     newRule: "New Rule",
     unnamedRule: "Untitled Rule",
     pageInfo: "Page {page} / {totalPages}, {totalItems} total",
@@ -252,7 +252,7 @@ const I18N = {
     logsCleared: "Logs and hit stats cleared.",
     deleteFailed: "Delete failed: {message}",
     ruleDeleted: "Rule deleted.",
-    statsCleared: "Stats cleared."
+    statsCleared: "Hit records cleared."
   },
   ja: {
     appTitle: "ResponseRewriter",
@@ -333,9 +333,9 @@ const I18N = {
     confirmDelete: "削除",
     logDetail: "インターセプト詳細",
     hitRecords: "命中記録",
-    clearStats: "統計をクリア",
-    clearStatsConfirm: "このルールの命中統計をクリアしますか？この操作は元に戻せません。",
-    clearStatsNote: "命中回数のみをクリアし、既存のインターセプトログは保持します。",
+    clearStats: "記録をクリア",
+    clearStatsConfirm: "このルールの命中記録をクリアしますか？この操作は元に戻せません。",
+    clearStatsNote: "このルールの既存のインターセプトログが削除され、命中回数がゼロに戻ります。",
     newRule: "新規ルール",
     unnamedRule: "無題のルール",
     pageInfo: "{page} / {totalPages} ページ、全 {totalItems} 件",
@@ -378,7 +378,7 @@ const I18N = {
     logsCleared: "ログと命中統計をクリアしました。",
     deleteFailed: "削除に失敗しました: {message}",
     ruleDeleted: "ルールを削除しました。",
-    statsCleared: "統計をクリアしました。"
+    statsCleared: "命中記録をクリアしました。"
   },
   ko: {
     appTitle: "ResponseRewriter",
@@ -459,9 +459,9 @@ const I18N = {
     confirmDelete: "삭제",
     logDetail: "인터셉트 상세",
     hitRecords: "명중 기록",
-    clearStats: "통계 비우기",
-    clearStatsConfirm: "이 규칙의 명중 통계를 비울까요? 이 작업은 되돌릴 수 없습니다.",
-    clearStatsNote: "명중 횟수만 비우며 기존 인터셉트 로그는 유지됩니다.",
+    clearStats: "기록 비우기",
+    clearStatsConfirm: "이 규칙의 명중 기록을 비울까요? 이 작업은 되돌릴 수 없습니다.",
+    clearStatsNote: "이 규칙의 기존 인터셉트 로그가 삭제되고 명중 횟수가 0으로 돌아갑니다.",
     newRule: "새 규칙",
     unnamedRule: "이름 없는 규칙",
     pageInfo: "{page} / {totalPages} 페이지, 총 {totalItems}개",
@@ -504,7 +504,7 @@ const I18N = {
     logsCleared: "로그와 명중 통계를 비웠습니다.",
     deleteFailed: "삭제 실패: {message}",
     ruleDeleted: "규칙을 삭제했습니다.",
-    statsCleared: "통계를 비웠습니다."
+    statsCleared: "명중 기록을 비웠습니다."
   }
 };
 

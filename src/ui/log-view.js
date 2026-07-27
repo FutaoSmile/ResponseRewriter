@@ -29,6 +29,12 @@ function getPageItems(items, page, pageSize) {
   };
 }
 
+function getRuleLogs(items, ruleId) {
+  return items.filter(function (log) {
+    return log.ruleId === ruleId;
+  });
+}
+
 function getFilteredLogs() {
   var keyword = logFilters.keyword.trim().toLowerCase();
   var resourceType = logFilters.resourceType.trim().toLowerCase();
