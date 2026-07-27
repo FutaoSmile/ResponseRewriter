@@ -425,38 +425,22 @@ function closeRuleModal() {
 let confirmAction = "";
 let resetStatsReturnFocus = null;
 
-function openDeleteModal(rule) {
-  deleteRuleId = rule.id;
-  confirmAction = "delete-rule";
-  elements.deleteModalText.textContent = t("deleteRuleNamed", { name: rule.name });
-  elements.deleteModal.classList.remove("hidden");
-  elements.deleteModal.setAttribute("aria-hidden", "false");
+function setConfirmDialogContent(titleKey, noteKey, messageKey, message, actionKey) {
+  elements.confirmModalTitle.dataset.i18n = titleKey;
+  elements.confirmModalNote.dataset.i18n = noteKey;
+  elements.confirmDeleteButton.dataset.i18n = actionKey;
+  if (messageKey) {
+    elements.deleteModalText.dataset.i18n = messageKey;
+  } else {
+    delete elements.deleteModalText.dataset.i18n;
+  }
+  elements.confirmModalTitle.textContent = t(titleKey);
+  elements.confirmModalNote.textContent = t(noteKey);
+  elements.deleteModalText.textContent = message;
+  elements.confirmDeleteButton.textContent = t(actionKey);
 }
 
-function openClearLogsConfirm() {
-  confirmAction = "clear-logs";
-  elements.deleteModalText.textContent = t("clearLogsConfirm");
-  elements.deleteModal.querySelector("h2").textContent = t("clearLogsTitle");
-  elements.deleteModal.classList.remove("hidden");
-  elements.deleteModal.setAttribute("aria-hidden", "false");
-}
-
-function openResetHitsConfirm() {
-  if (!hitsModalRuleId) return;
-  confirmAction = "reset-hit-stats";
-  resetStatsReturnFocus = document.activeElement;
-  elements.confirmModalTitle.dataset.i18n = "clearStats";
-  elements.confirmModalNote.dataset.i18n = "clearStatsNote";
-  elements.deleteModalText.dataset.i18n = "clearStatsConfirm";
-  elements.confirmDeleteButton.dataset.i18n = "clearStats";
-  elements.confirmModalTitle.textContent = t("clearStats");
-  elements.confirmModalNote.textContent = t("clearStatsNote");
-  elements.deleteModalText.textContent = t("clearStatsConfirm");
-  elements.confirmDeleteButton.textContent = t("clearStats");
-  // The hit records dialog stays visually behind the confirmation so cancel can
-  // return to it without rebuilding its expanded rows.
-  elements.hitsModal.setAttribute("aria-hidden", "true");
-  elements.deleteModal.classList.add("modal-confirm-above");
+function showConfirmDialog() {
   elements.deleteModal.classList.remove("hidden");
   elements.deleteModal.setAttribute("aria-hidden", "false");
   setTimeout(function () {
@@ -464,17 +448,60 @@ function openResetHitsConfirm() {
   }, 0);
 }
 
+function openDeleteModal(rule) {
+  deleteRuleId = rule.id;
+  confirmAction = "delete-rule";
+  setConfirmDialogContent(
+    "deleteRule",
+    "deleteRuleNote",
+    "",
+    t("deleteRuleNamed", { name: rule.name }),
+    "confirmDelete"
+  );
+  showConfirmDialog();
+}
+
+function openClearLogsConfirm() {
+  confirmAction = "clear-logs";
+  setConfirmDialogContent(
+    "clearLogsTitle",
+    "clearLogsNote",
+    "clearLogsConfirm",
+    t("clearLogsConfirm"),
+    "confirmClearLogs"
+  );
+  showConfirmDialog();
+}
+
+function openResetHitsConfirm() {
+  if (!hitsModalRuleId) return;
+  confirmAction = "reset-hit-stats";
+  resetStatsReturnFocus = document.activeElement;
+  setConfirmDialogContent(
+    "clearStats",
+    "clearStatsNote",
+    "clearStatsConfirm",
+    t("clearStatsConfirm"),
+    "clearStats"
+  );
+  // The hit records dialog stays visually behind the confirmation so cancel can
+  // return to it without rebuilding its expanded rows.
+  elements.hitsModal.setAttribute("aria-hidden", "true");
+  elements.deleteModal.classList.add("modal-confirm-above");
+  showConfirmDialog();
+}
+
 function closeDeleteModal() {
   var closedResetStatsConfirm = confirmAction === "reset-hit-stats";
   deleteRuleId = "";
   confirmAction = "";
-  elements.confirmModalTitle.dataset.i18n = "deleteRule";
-  elements.confirmModalNote.dataset.i18n = "deleteRuleNote";
-  elements.deleteModalText.dataset.i18n = "deleteRuleConfirm";
-  elements.confirmDeleteButton.dataset.i18n = "confirmDelete";
-  elements.confirmModalTitle.textContent = t("deleteRule");
-  elements.confirmModalNote.textContent = t("deleteRuleNote");
-  elements.confirmDeleteButton.textContent = t("confirmDelete");
+  setConfirmDialogContent(
+    "deleteRule",
+    "deleteRuleNote",
+    "deleteRuleConfirm",
+    t("deleteRuleConfirm"),
+    "confirmDelete"
+  );
   elements.deleteModal.classList.remove("modal-confirm-above");
   elements.deleteModal.classList.add("hidden");
   elements.deleteModal.setAttribute("aria-hidden", "true");

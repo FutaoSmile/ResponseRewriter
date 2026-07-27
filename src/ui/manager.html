@@ -65,7 +65,7 @@
         <section class="panel manager-logs">
           <div class="panel-bar">
             <h2 data-i18n="logsTitle">拦截日志</h2>
-            <button id="clearLogsButton" type="button" class="danger" style="padding:4px 10px;font-size:11px;display:none;" data-i18n="clear">清空</button>
+            <button id="clearLogsButton" type="button" class="danger" style="display:none;" data-i18n="clear">清空</button>
           </div>
           <div class="log-filter-bar">
             <input id="logSearchInput" type="search" placeholder="搜索规则、方法或 URL" data-i18n-placeholder="logSearchPlaceholder">
@@ -106,12 +106,11 @@
         </div>
 
         <form id="ruleForm" class="rule-form">
-          <div class="form-grid">
+          <div class="rule-form-row rule-form-row-3">
             <label class="field field-name">
               <span data-i18n="ruleName">规则名称</span>
               <input id="ruleName" name="ruleName" type="text" maxlength="60" placeholder="例如：改写用户信息" data-i18n-placeholder="ruleNamePlaceholder">
             </label>
-
             <label class="field field-method">
               <span data-i18n="requestMethod">请求方法</span>
               <select id="matchMethod">
@@ -123,17 +122,18 @@
                 <option value="DELETE">DELETE</option>
               </select>
             </label>
-
-            <label class="field field-switch">
-              <span data-i18n="enabled">启用</span>
-              <label class="switch">
-                <input id="ruleEnabled" name="ruleEnabled" type="checkbox" checked>
-                <span class="switch-slider"></span>
-              </label>
-            </label>
+            <div class="field field-switch">
+              <span id="ruleEnabledLabel" data-i18n="enabled">启用</span>
+              <div class="switch-control">
+                <label class="switch">
+                  <input id="ruleEnabled" name="ruleEnabled" type="checkbox" checked aria-labelledby="ruleEnabledLabel">
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+            </div>
           </div>
 
-          <div class="match-config-grid">
+          <div class="rule-form-row rule-form-row-2 rule-form-row-gap">
             <label class="field">
               <span data-i18n="urlMatchMode">URL 匹配方式</span>
               <select id="urlMatchMode">
@@ -155,7 +155,7 @@
             </div>
           </div>
 
-          <label class="field response-mode-field">
+          <label class="field field-response-mode">
             <span data-i18n="rewriteMode">响应处理方式</span>
             <select id="rewriteMode">
               <option value="replace" data-i18n="rewriteModeReplace">整段替换</option>
@@ -171,6 +171,7 @@
               <code id="rewriteModeExample"></code>
             </div>
           </div>
+
           <label class="field">
             <span id="responseBodyLabel" data-i18n="responseBody">返回内容</span>
             <div class="textarea-action-wrap">
@@ -189,18 +190,23 @@
     <!-- Delete Confirm Modal -->
     <div id="deleteModal" class="modal hidden" aria-hidden="true">
       <div class="modal-backdrop" data-close-modal="delete"></div>
-      <section class="modal-card modal-card-small modal-resizable">
+      <section class="modal-card modal-card-small modal-resizable confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmModalTitle" aria-describedby="deleteModalText confirmModalNote">
         <div class="modal-header">
-          <div>
-            <h2 id="confirmModalTitle" data-i18n="deleteRule">删除规则</h2>
-            <p id="confirmModalNote" class="panel-note" data-i18n="deleteRuleNote">删除后不可恢复。</p>
-          </div>
+          <h2 id="confirmModalTitle" data-i18n="deleteRule">删除规则</h2>
           <button id="closeDeleteModalButton" type="button" class="icon-button" aria-label="关闭" data-i18n-aria-label="close">&times;</button>
         </div>
-        <p id="deleteModalText" class="delete-copy" data-i18n="deleteRuleConfirm">确定删除这条规则吗？</p>
+        <p id="deleteModalText" class="confirm-dialog-copy" data-i18n="deleteRuleConfirm">确定删除这条规则吗？</p>
+        <div class="confirm-dialog-warning">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M12 7.5v6"></path>
+            <path d="M12 17h.01"></path>
+          </svg>
+          <p id="confirmModalNote" data-i18n="deleteRuleNote">删除后不可恢复。</p>
+        </div>
         <div class="form-actions">
           <button id="cancelDeleteButton" type="button" data-i18n="cancel">取消</button>
-          <button id="confirmDeleteButton" type="button" class="danger" data-i18n="confirmDelete">确认删除</button>
+          <button id="confirmDeleteButton" type="button" class="danger" data-i18n="confirmDelete">删除规则</button>
         </div>
       </section>
     </div>

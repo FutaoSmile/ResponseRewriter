@@ -190,6 +190,7 @@ node --test
 - Rules are stored locally in Chrome extension storage.
 - The extension rewrites text-based responses. Binary responses are not targeted.
 - `mock-fetch` intercepts Fetch in the page context only. It does not intercept XHR, workers, `sendBeacon`, or resource requests from HTML elements.
+- When `mock-fetch` matches, it does not call the native Fetch implementation, so the request never enters Chrome's network stack and does not appear in the DevTools Network panel. Use the extension's interception log to inspect the match.
 - `mock-fetch` currently returns HTTP 200 with `application/json; charset=utf-8`.
 - JSON merge requires both the original response and configured content to be JSON objects.
 - JavaScript transforms use `new Function`. If the target page CSP blocks dynamic code execution, the original response is preserved.

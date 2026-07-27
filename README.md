@@ -190,6 +190,7 @@ node --test
 - 规则数据保存在 Chrome 扩展本地存储中。
 - 当前主要面向文本响应改写，不针对二进制响应。
 - `mock-fetch` 只拦截页面上下文中的 Fetch，不拦截 XHR、Worker、`sendBeacon` 或标签资源请求。
+- `mock-fetch` 命中后不会调用原生 Fetch，请求不会进入 Chrome 网络层，因此不会出现在开发者工具的 Network 面板中；请在扩展的拦截日志中查看该命中。
 - `mock-fetch` 当前固定返回 HTTP 200 和 `application/json; charset=utf-8`。
 - JSON 局部合并要求原响应和规则内容都是 JSON 对象。
 - JavaScript 转换使用 `new Function` 执行；如果目标页面的 CSP 禁止动态代码执行，会保留原响应。

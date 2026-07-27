@@ -53,6 +53,20 @@ test("every URL and response mode has localized guidance and an example", functi
   });
 });
 
+test("mock-fetch guidance warns that the request is absent from DevTools Network", function () {
+  const context = createUiContext();
+  const hints = JSON.parse(vm.runInContext(`
+    JSON.stringify(["zh-CN", "en", "ja", "ko"].map(function (locale) {
+      currentLocale = locale;
+      return getRewriteModeGuide("mock-fetch").hint;
+    }))
+  `, context));
+
+  hints.forEach(function (hint) {
+    assert.match(hint, /Network/);
+  });
+});
+
 test("clearing hit records deletes the matching logs and uses the localized confirmation", function () {
   const context = createUiContext();
   const copy = JSON.parse(vm.runInContext(`
@@ -71,6 +85,37 @@ test("clearing hit records deletes the matching logs and uses the localized conf
   assert.match(popupSource, /confirmAction === "reset-hit-stats"[\s\S]*log\.ruleId !== hitsModalRuleId[\s\S]*createEmptyStats\(\)/);
   assert.match(popupSource, /chrome\.storage\.local\.set\(\{ rules: rules, logs: logs \}/);
   assert.doesNotMatch(popupSource, /window\.confirm\(t\("clearStatsConfirm"\)\)/);
+});
+
+test("destructive confirmations use a consistent warning dialog and localized actions", function () {
+  const context = createUiContext();
+  const managerSource = fs.readFileSync(path.join(uiDirectory, "manager.html"), "utf8");
+  const popupSource = fs.readFileSync(path.join(uiDirectory, "popup.js"), "utf8");
+  const keys = [
+    "deleteRuleNote",
+    "confirmDelete",
+    "clearStatsNote",
+    "clearLogsNote",
+    "confirmClearLogs"
+  ];
+  const copy = JSON.parse(vm.runInContext(`
+    JSON.stringify(["zh-CN", "en", "ja", "ko"].flatMap(function (locale) {
+      currentLocale = locale;
+      return ${JSON.stringify(keys)}.map(function (key) {
+        return [key, t(key)];
+      });
+    }))
+  `, context));
+
+  assert.match(managerSource, /class="[^"]*confirm-dialog[^"]*" role="alertdialog"/);
+  assert.match(managerSource, /class="confirm-dialog-warning"[\s\S]*<svg[\s\S]*id="confirmModalNote"/);
+  assert.match(popupSource, /function setConfirmDialogContent\(/);
+  assert.match(popupSource, /"clearLogsNote"[\s\S]*"confirmClearLogs"/);
+  assert.match(popupSource, /showConfirmDialog[\s\S]*cancelDeleteButton\.focus\(\)/);
+  copy.forEach(function (entry) {
+    assert.notEqual(entry[1], entry[0]);
+    assert.notEqual(entry[1].trim(), "");
+  });
 });
 
 test("rule hit counts use the currently retained logs", function () {
@@ -100,6 +145,63 @@ test("rule form renders guidance targets for both mode selectors", function () {
   ].forEach(function (id) {
     assert.match(managerSource, new RegExp('id="' + id + '"'));
   });
+});
+
+test("rule form layout flows naturally without redundant section titles", function () {
+  const managerSource = fs.readFileSync(path.join(uiDirectory, "manager.html"), "utf8");
+
+  assert.match(managerSource, /id="ruleName"[\s\S]*id="matchMethod"[\s\S]*id="ruleEnabled"/);
+  assert.match(managerSource, /id="urlMatchMode"[\s\S]*id="urlMatchValue"[\s\S]*id="urlMatchModeHint"/);
+  assert.match(managerSource, /id="rewriteMode"[\s\S]*id="rewriteBody"[\s\S]*id="saveButton"/);
+  assert.doesNotMatch(managerSource, /rule-form-section-title/);
+});
+
+test("rule enabled switch aligns with adjacent form controls in compact layout", function () {
+  const managerSource = fs.readFileSync(path.join(uiDirectory, "manager.html"), "utf8");
+  const styles = fs.readFileSync(path.join(uiDirectory, "popup.css"), "utf8");
+
+  assert.match(managerSource, /class="field field-switch"[\s\S]*id="ruleEnabled"/);
+  assert.match(styles, /\.field-switch\s*\{[^{}]*justify-content:\s*flex-end;/);
+});
+
+test("rule action column adapts to expanded English button labels", function () {
+  const styles = fs.readFileSync(path.join(uiDirectory, "popup.css"), "utf8");
+
+  assert.match(styles, /--rule-actions-width:\s*140px;/);
+  assert.match(styles, /html:lang\(en\)\s*\{[^{}]*--rule-actions-width:\s*188px;/);
+  assert.equal((styles.match(/grid-template-columns:[^;]*var\(--rule-actions-width\);/g) || []).length, 2);
+  assert.match(styles, /\.table-action\s*\{[^{}]*white-space:\s*nowrap;/);
+});
+
+test("localized rule table headings stay on one line", function () {
+  const styles = fs.readFileSync(path.join(uiDirectory, "popup.css"), "utf8");
+
+  assert.match(
+    styles,
+    /\.manager-rules \.list-head > span\s*\{\s*white-space:\s*nowrap;\s*\}/
+  );
+});
+
+test("manager list controls use compact sizing without shrinking their labels", function () {
+  const managerSource = fs.readFileSync(path.join(uiDirectory, "manager.html"), "utf8");
+  const styles = fs.readFileSync(path.join(uiDirectory, "popup.css"), "utf8");
+
+  assert.doesNotMatch(managerSource, /clearLogsButton[^>]*font-size:/);
+  assert.match(styles, /--compact-control-height:\s*34px;/);
+  assert.match(styles, /\.header-select select\s*\{[^{}]*min-height:\s*var\(--compact-control-height\);/);
+  assert.match(styles, /\.app-manager \.log-filter-bar input,[\s\S]*?min-height:\s*var\(--compact-control-height\);/);
+  assert.match(styles, /\.app-manager \.panel-actions button,[\s\S]*?min-height:\s*32px;/);
+});
+
+test("select focus styles preserve the custom dropdown arrow", function () {
+  const styles = fs.readFileSync(path.join(uiDirectory, "popup.css"), "utf8");
+  const focusBlocks = Array.from(styles.matchAll(/([^{}]*select:focus[^{}]*)\{([^{}]*)\}/g));
+
+  assert.notEqual(focusBlocks.length, 0);
+  focusBlocks.forEach(function (match) {
+    assert.doesNotMatch(match[2], /(^|;)\s*background\s*:/);
+  });
+  assert.match(styles, /select:focus\s*\{[^{}]*background-image:/);
 });
 
 test("rule model keeps backward-compatible defaults after extraction", function () {
