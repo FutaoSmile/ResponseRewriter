@@ -150,6 +150,16 @@
       );
   }
 
+  function isMockFetchRule(rule) {
+    return rule && rule.rewrite && rule.rewrite.mode === "mock-fetch";
+  }
+
+  function getMatchingMockFetchRules(context) {
+    return activeRules.filter(function (rule) {
+      return isMockFetchRule(rule) && ruleApplies(rule, context);
+    });
+  }
+
   function isPlainObject(value) {
     return Object.prototype.toString.call(value) === "[object Object]";
   }
@@ -259,7 +269,7 @@
     // output. This makes multiple enabled rules an explicit transformation pipeline.
     for (const rule of activeRules) {
       const nextContext = Object.assign({}, context, { responseText: currentText });
-      if (!ruleApplies(rule, nextContext)) {
+      if (isMockFetchRule(rule) || !ruleApplies(rule, nextContext)) {
         continue;
       }
 
@@ -400,7 +410,9 @@
   }
 
   function emitRuleHit(rule, context) {
-    showRewriteToast(rule, context);
+    if (context.outcome !== "xhr-passthrough") {
+      showRewriteToast(rule, context);
+    }
 
     window.postMessage(
       {
@@ -412,6 +424,7 @@
         url: context.url,
         method: context.method,
         resourceType: context.resourceType,
+        outcome: context.outcome || "rewritten",
         originalResponse: context.originalResponse,
         rewrittenResponse: context.rewrittenResponse
       },
@@ -447,6 +460,30 @@
             return;
           }
 
+          const url = String(xhr.responseURL || xhr.__interceptor.url || "");
+          const originalText = xhr.responseType === "" || xhr.responseType === "text"
+            ? xhr.responseText
+            : "";
+          const mockFetchRules = getMatchingMockFetchRules({
+            resourceType: "xhr",
+            method: xhr.__interceptor.method,
+            url: url,
+            responseText: originalText
+          });
+
+          // Direct-return rules intentionally support Fetch only. XHR must retain
+          // its native request and response, while the log makes that limitation clear.
+          mockFetchRules.forEach(function (rule) {
+            emitRuleHit(rule, {
+              resourceType: "xhr",
+              method: xhr.__interceptor.method,
+              url: url,
+              outcome: "xhr-passthrough",
+              originalResponse: originalText,
+              rewrittenResponse: originalText
+            });
+          });
+
           if (xhr.responseType !== "" && xhr.responseType !== "text") {
             return;
           }
@@ -458,7 +495,7 @@
           const result = rewriteText({
             resourceType: "xhr",
             method: xhr.__interceptor.method,
-            url: String(xhr.responseURL || xhr.__interceptor.url || ""),
+            url: url,
             responseText: xhr.responseText
           });
 
@@ -470,7 +507,7 @@
             emitRuleHit(rule, {
               resourceType: "xhr",
               method: xhr.__interceptor.method,
-              url: String(xhr.responseURL || xhr.__interceptor.url || ""),
+              url: url,
               originalResponse: xhr.responseText,
               rewrittenResponse: result.text
             });
@@ -511,6 +548,32 @@
       return waitForRules().then(function () {
         if (!hasMatchableRules()) {
           return nativeFetch.apply(fetchThis, fetchArgs);
+        }
+
+        const mockFetchRule = getMatchingMockFetchRules({
+          resourceType: "fetch",
+          method: requestContext.method,
+          url: requestContext.url,
+          responseText: ""
+        })[0];
+
+        if (mockFetchRule) {
+          const mockedText = mockFetchRule.rewrite.body;
+          emitRuleHit(mockFetchRule, {
+            resourceType: "fetch",
+            method: requestContext.method,
+            url: requestContext.url,
+            outcome: "mock-fetch",
+            originalResponse: "",
+            rewrittenResponse: mockedText
+          });
+
+          // Returning before nativeFetch is the security boundary: the matched
+          // request never enters Chrome's network stack or reaches the server.
+          return new Response(mockedText, {
+            status: 200,
+            headers: { "content-type": "application/json; charset=utf-8" }
+          });
         }
 
         // URL/method matching does not require the body, so this preflight avoids

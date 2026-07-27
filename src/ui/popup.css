@@ -1573,7 +1573,7 @@ html[data-theme="dark"] .diff-stat.is-added {
 
 .hit-summary {
   display: grid;
-  grid-template-columns: 18px 160px 50px 1fr 56px;
+  grid-template-columns: 18px 150px 50px minmax(120px, 1fr) minmax(160px, auto);
   gap: 10px;
   align-items: center;
   cursor: pointer;
@@ -1957,6 +1957,12 @@ html[data-theme="dark"] .manager-rules .rule-item:hover {
   background: var(--brand-50);
 }
 
+.log-card.is-warning,
+.log-card.is-warning:hover {
+  border-color: var(--warning-500);
+  background: var(--warning-50);
+}
+
 .log-card:active {
   transform: scale(0.98);
   transition-duration: 50ms;
@@ -1993,6 +1999,58 @@ html[data-theme="dark"] .manager-rules .rule-item:hover {
   border-radius: 50%;
   background: var(--gray-300);
   flex-shrink: 0;
+}
+
+.log-outcome-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  max-width: 100%;
+  padding: 2px 7px;
+  border: 1px solid;
+  border-radius: var(--radius-full);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.log-outcome-badge.is-success {
+  border-color: var(--success-500);
+  background: var(--success-50);
+  color: var(--success-600);
+}
+
+.log-outcome-badge.is-warning {
+  border-color: var(--warning-500);
+  background: var(--warning-50);
+  color: var(--text-primary);
+}
+
+.log-outcome-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.log-outcome-notice.is-success {
+  border-color: var(--success-500);
+  background: var(--success-50);
+  color: var(--text-primary);
+}
+
+.log-outcome-notice.is-warning {
+  border-color: var(--warning-500);
+  background: var(--warning-50);
+  color: var(--text-primary);
+}
+
+.log-outcome-notice strong {
+  font-size: 12.5px;
 }
 
 /* Log detail modal */

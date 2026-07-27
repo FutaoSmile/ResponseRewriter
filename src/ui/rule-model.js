@@ -92,7 +92,7 @@ function normalizeRule(rule, index) {
         : (match.url && typeof match.url.value === "string" ? match.url.value : "")
     },
     rewrite: {
-      mode: rewrite.mode === "json-merge" || rewrite.mode === "script"
+      mode: rewrite.mode === "json-merge" || rewrite.mode === "script" || rewrite.mode === "mock-fetch"
         ? rewrite.mode
         : "replace",
       body: typeof rewrite.body === "string" ? rewrite.body : ""

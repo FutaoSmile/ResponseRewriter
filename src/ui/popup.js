@@ -560,8 +560,7 @@ function openHitsModal(rule) {
           '<span>' + formatDate(l.matchedAt) + '</span>' +
           '<span>' + escapeHtml(l.method || "-") + '</span>' +
           '<span class="hit-url" title="' + escapeHtml(l.url) + '">' + escapeHtml(l.url || "-") + '</span>' +
-          '<span>' + escapeHtml(l.resourceType || "-") + '</span>' +
-          renderLogOutcomeBadge(l) +
+          (renderLogOutcomeBadge(l) || '<span>' + escapeHtml(l.resourceType || "-") + '</span>') +
         '</div>';
       var detail = document.createElement("div");
       detail.className = "hit-detail hidden";

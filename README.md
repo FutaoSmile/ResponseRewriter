@@ -48,8 +48,8 @@ ResponseRewriter 是一个 Chrome Manifest V3 扩展。它会在页面上下文�
 3. 填写规则名称和请求方法，选择 URL 匹配方式与响应处理方式。
 4. 填写 URL 匹配值和响应内容或转换脚本。
 5. 保存规则。
-6. 刷新或继续使用目标页面，命中的 XHR / Fetch 响应会被改写。
-7. 在管理页面查看命中次数和拦截日志，打开拦截详情可对比改写前后的响应差异。
+6. 刷新或继续使用目标页面：普通规则会改写命中的 XHR / Fetch 响应；直接返回规则会阻止命中的 Fetch 发往服务器。
+7. 在管理页面查看命中次数和拦截日志。XHR 命中直接返回规则时会正常发往服务器，并显示醒目的警告标识。
 
 ### URL 匹配方式
 
@@ -68,6 +68,9 @@ ResponseRewriter 是一个 Chrome Manifest V3 扩展。它会在页面上下文�
 | **整段替换**（`replace`） | `{"code":0,"data":{"name":"Mock"}}` | 完全忽略原响应，返回固定内容 |
 | **JSON 局部合并**（`json-merge`） | `{"data":{"role":"admin"}}` | 只修改指定 JSON 字段，保留原响应的其他字段 |
 | **JavaScript 转换**（`script`） | `const data = JSON.parse(originalResponse);`<br>`data.role = "admin";`<br>`return data;` | 根据原响应或请求信息动态计算结果 |
+| **拦截 Fetch，直接返回**（`mock-fetch`） | `{"code":0,"data":{"source":"local"}}` | 不向服务器发送 Fetch，直接返回固定内容 |
+
+`mock-fetch` 只处理 Fetch：第一个匹配的直接返回规则会返回 HTTP 200 和 JSON 内容类型。XHR 命中时不会被拦截或改写，仍会发送至服务器，并记录“XHR 未拦截 · 已发送服务器”警告日志。
 
 JavaScript 转换脚本可以使用以下参数：
 
@@ -133,6 +136,22 @@ data.requestUrl = context.url;
 return data;
 ```
 
+拦截 Fetch 并直接返回示例：
+
+```json
+{
+  "match": {
+    "method": "GET",
+    "urlMode": "exact",
+    "url": "/api/config"
+  },
+  "rewrite": {
+    "mode": "mock-fetch",
+    "body": "{\"debug\":true,\"source\":\"local\"}"
+  }
+}
+```
+
 ## 测试
 
 项目使用 Node.js 内置测试运行器，无需安装依赖：
@@ -170,6 +189,8 @@ node --test
 - URL 匹配会忽略查询参数。
 - 规则数据保存在 Chrome 扩展本地存储中。
 - 当前主要面向文本响应改写，不针对二进制响应。
+- `mock-fetch` 只拦截页面上下文中的 Fetch，不拦截 XHR、Worker、`sendBeacon` 或标签资源请求。
+- `mock-fetch` 当前固定返回 HTTP 200 和 `application/json; charset=utf-8`。
 - JSON 局部合并要求原响应和规则内容都是 JSON 对象。
 - JavaScript 转换使用 `new Function` 执行；如果目标页面的 CSP 禁止动态代码执行，会保留原响应。
 - 转换脚本在页面上下文中运行，只应使用自己编写和确认安全的脚本。

@@ -36,12 +36,13 @@ test("every URL and response mode has localized guidance and an example", functi
         getUrlModeGuide("regex"),
         getRewriteModeGuide("replace"),
         getRewriteModeGuide("json-merge"),
-        getRewriteModeGuide("script")
+        getRewriteModeGuide("script"),
+        getRewriteModeGuide("mock-fetch")
       ];
     }))
   `, context));
 
-  assert.equal(guides.length, 24);
+  assert.equal(guides.length, 28);
   guides.forEach(function (guide) {
     assert.equal(typeof guide.hint, "string");
     assert.notEqual(guide.hint.trim(), "");
@@ -173,4 +174,16 @@ test("response diff renderer escapes response text", function () {
   assert.match(html, /&lt;script&gt;/);
   assert.match(html, /diff-cell is-removed/);
   assert.match(html, /diff-cell is-added/);
+});
+
+test("XHR passthrough logs render a prominent localized warning", function () {
+  const context = createUiContext();
+  const html = vm.runInContext(
+    'renderLogDetailHTML("server", "server", "xhr-passthrough")',
+    context
+  );
+
+  assert.match(html, /log-outcome-notice is-warning/);
+  assert.match(html, /XHR 未拦截/);
+  assert.match(html, /已正常发送至服务器/);
 });

@@ -122,13 +122,14 @@ function renderLogList() {
 
   paged.items.forEach(function (log, index) {
     var card = document.createElement("div");
-    card.className = "log-card";
+    card.className = "log-card" + (log.outcome === "xhr-passthrough" ? " is-warning" : "");
     card.style.animationDelay = (index * 0.04) + "s";
     card.dataset.logId = log.id;
     card.innerHTML =
       '<div class="log-card-url">' + escapeHtml(log.url || "-") + '</div>' +
       '<div class="log-card-meta">' +
         '<span>' + escapeHtml(log.method || "-") + '</span>' +
+        renderLogOutcomeBadge(log) +
         '<span class="sep"></span>' +
         '<span>' + escapeHtml(log.ruleName || "-") + '</span>' +
         '<span class="sep"></span>' +
@@ -313,8 +314,31 @@ function renderDiffCell(side, text, lineNumber, changed) {
     '</div>';
 }
 
+function renderLogOutcomeBadge(log) {
+  if (!log || log.outcome === "rewritten" || !log.outcome) {
+    return "";
+  }
+
+  var isPassthrough = log.outcome === "xhr-passthrough";
+  return '<span class="log-outcome-badge ' + (isPassthrough ? "is-warning" : "is-success") + '">' +
+    t(isPassthrough ? "logOutcomeXhrPassthrough" : "logOutcomeMockFetch") +
+    '</span>';
+}
+
+function renderLogOutcomeNotice(outcome) {
+  if (outcome !== "mock-fetch" && outcome !== "xhr-passthrough") {
+    return "";
+  }
+
+  var isPassthrough = outcome === "xhr-passthrough";
+  return '<div class="log-outcome-notice ' + (isPassthrough ? "is-warning" : "is-success") + '">' +
+    '<strong>' + t(isPassthrough ? "logOutcomeXhrPassthrough" : "logOutcomeMockFetch") + '</strong>' +
+    '<span>' + t(isPassthrough ? "logNoticeXhrPassthrough" : "logNoticeMockFetch") + '</span>' +
+    '</div>';
+}
+
 /* Shared log detail renderer — used by log modal & hits modal */
-function renderLogDetailHTML(original, rewritten) {
+function renderLogDetailHTML(original, rewritten, outcome) {
   var diff = createLineDiff(original, rewritten);
   var hasChanges = diff.addedCount > 0 || diff.removedCount > 0;
   var rows = diff.rows.map(function (row) {
@@ -325,6 +349,7 @@ function renderLogDetailHTML(original, rewritten) {
   }).join("");
 
   return '<section class="response-diff" data-log-detail>' +
+    renderLogOutcomeNotice(outcome) +
     '<div class="diff-summary">' +
       '<strong>' + t(hasChanges ? "diffChanged" : "diffNoChanges") + '</strong>' +
       '<div class="diff-stats">' +
@@ -334,8 +359,8 @@ function renderLogDetailHTML(original, rewritten) {
     '</div>' +
     '<div class="diff-table" role="table">' +
       '<div class="diff-columns" role="row">' +
-        '<div role="columnheader">' + t("originalResponse") + '</div>' +
-        '<div role="columnheader">' + t("rewrittenResponse") + '</div>' +
+        '<div role="columnheader">' + t(outcome === "mock-fetch" ? "serverNotRequested" : "originalResponse") + '</div>' +
+        '<div role="columnheader">' + t(outcome === "mock-fetch" ? "directResponse" : "rewrittenResponse") + '</div>' +
       '</div>' +
       rows +
     '</div>' +
@@ -349,6 +374,7 @@ function openLogModal(log) {
       '<span class="log-meta-tag">' + t("time") + ' <strong>' + formatDate(log.matchedAt) + '</strong></span>' +
       '<span class="log-meta-tag">' + t("method") + ' <strong>' + escapeHtml(log.method || "-") + '</strong></span>' +
       '<span class="log-meta-tag">' + t("type") + ' <strong>' + escapeHtml(log.resourceType || "-") + '</strong></span>' +
+      renderLogOutcomeBadge(log) +
       '<span class="log-meta-tag log-meta-tag-url" title="' + escapeHtml(log.url || "") + '">URL <strong>' + escapeHtml(log.url || "-") + '</strong></span>';
   } else {
     elements.logMetaText.textContent =
@@ -356,7 +382,10 @@ function openLogModal(log) {
   }
   var currentDetail = elements.logModal.querySelector("[data-log-detail]");
   if (currentDetail) currentDetail.remove();
-  elements.logModal.querySelector(".modal-card").insertAdjacentHTML("beforeend", renderLogDetailHTML(log.originalResponse, log.rewrittenResponse));
+  elements.logModal.querySelector(".modal-card").insertAdjacentHTML(
+    "beforeend",
+    renderLogDetailHTML(log.originalResponse, log.rewrittenResponse, log.outcome)
+  );
   elements.logModal.classList.remove("hidden");
   elements.logModal.setAttribute("aria-hidden", "false");
 }

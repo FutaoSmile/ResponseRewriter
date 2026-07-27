@@ -48,8 +48,8 @@ It is designed for local development, debugging, frontend integration testing, m
 3. Enter the rule name and request method, then select the URL match and response modes.
 4. Enter the URL match value and response content or transform script.
 5. Save the rule.
-6. Refresh or continue using the target page. Matching XHR / Fetch responses will be rewritten.
-7. Check hit counts and logs in the manager page. Open an intercept detail to compare the response before and after rewriting.
+6. Refresh or continue using the target page. Regular rules rewrite matching XHR / Fetch responses; direct-return rules prevent matching Fetch requests from reaching the server.
+7. Check hit counts and logs in the manager page. An XHR matching a direct-return rule still reaches the server and receives a prominent warning label.
 
 ### URL Match Modes
 
@@ -68,6 +68,9 @@ All three modes remove query parameters and URL fragments before matching.
 | **Replace entire body** (`replace`) | `{"code":0,"data":{"name":"Mock"}}` | The original response should be completely replaced with fixed content |
 | **Merge JSON** (`json-merge`) | `{"data":{"role":"admin"}}` | Only selected JSON fields should change while other fields remain |
 | **JavaScript transform** (`script`) | `const data = JSON.parse(originalResponse);`<br>`data.role = "admin";`<br>`return data;` | The result must be calculated from the original response or request context |
+| **Intercept Fetch and return directly** (`mock-fetch`) | `{"code":0,"data":{"source":"local"}}` | Return fixed content without sending the Fetch request to the server |
+
+`mock-fetch` applies to Fetch only. The first matching direct-return rule produces an HTTP 200 response with a JSON content type. Matching XHR requests are neither intercepted nor rewritten; they reach the server and are logged as “XHR not intercepted · sent to server.”
 
 JavaScript transforms receive these parameters:
 
@@ -133,6 +136,22 @@ data.requestUrl = context.url;
 return data;
 ```
 
+Intercept Fetch and return directly:
+
+```json
+{
+  "match": {
+    "method": "GET",
+    "urlMode": "exact",
+    "url": "/api/config"
+  },
+  "rewrite": {
+    "mode": "mock-fetch",
+    "body": "{\"debug\":true,\"source\":\"local\"}"
+  }
+}
+```
+
 ## Testing
 
 The project uses the built-in Node.js test runner and requires no test dependencies:
@@ -170,6 +189,8 @@ node --test
 - URL matching ignores query parameters.
 - Rules are stored locally in Chrome extension storage.
 - The extension rewrites text-based responses. Binary responses are not targeted.
+- `mock-fetch` intercepts Fetch in the page context only. It does not intercept XHR, workers, `sendBeacon`, or resource requests from HTML elements.
+- `mock-fetch` currently returns HTTP 200 with `application/json; charset=utf-8`.
 - JSON merge requires both the original response and configured content to be JSON objects.
 - JavaScript transforms use `new Function`. If the target page CSP blocks dynamic code execution, the original response is preserved.
 - Transform scripts run in the page context. Only use scripts you wrote or have reviewed.

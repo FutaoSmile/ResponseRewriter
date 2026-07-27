@@ -18,5 +18,25 @@
       "lastMatchedUrl": "",
       "lastResourceType": ""
     }
+  },
+  {
+    "id": "rule-config-002",
+    "enabled": true,
+    "name": "直接返回本地配置",
+    "match": {
+      "method": "GET",
+      "urlMode": "exact",
+      "url": "/api/config"
+    },
+    "rewrite": {
+      "mode": "mock-fetch",
+      "body": "{\n  \"debug\": true,\n  \"source\": \"local\"\n}"
+    },
+    "stats": {
+      "hitCount": 0,
+      "lastMatchedAt": "",
+      "lastMatchedUrl": "",
+      "lastResourceType": ""
+    }
   }
 ]

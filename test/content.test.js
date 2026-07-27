@@ -83,6 +83,11 @@ test("new URL and response modes survive normalization", function () {
       id: "regex",
       match: { urlMode: "regex", url: "/users/\\d+$" },
       rewrite: { mode: "script", body: "return originalResponse;" }
+    },
+    {
+      id: "mock-fetch",
+      match: { urlMode: "exact", url: "/mock" },
+      rewrite: { mode: "mock-fetch", body: "{}" }
     }
   ]);
 
@@ -90,6 +95,7 @@ test("new URL and response modes survive normalization", function () {
   assert.equal(normalized[0].rewrite.mode, "json-merge");
   assert.equal(normalized[1].match.urlMode, "regex");
   assert.equal(normalized[1].rewrite.mode, "script");
+  assert.equal(normalized[2].rewrite.mode, "mock-fetch");
 });
 
 test("unknown modes fall back to safe defaults", function () {

@@ -37,6 +37,9 @@ function createHarness(originalBody) {
   const messageListeners = [];
   const elementsById = {};
   const errors = [];
+  const pageMessages = [];
+  let fetchCallCount = 0;
+  let xhrSendCount = 0;
 
   function FakeXHR() {
     this._listeners = {};
@@ -54,6 +57,7 @@ function createHarness(originalBody) {
     this.responseURL = String(url);
   };
   FakeXHR.prototype.send = function () {
+    xhrSendCount += 1;
     this.readyState = 4;
     (this._listeners.readystatechange || []).forEach(function (listener) {
       listener.call(this);
@@ -66,8 +70,11 @@ function createHarness(originalBody) {
     addEventListener(type, listener) {
       if (type === "message") messageListeners.push(listener);
     },
-    postMessage() {},
+    postMessage(message) {
+      pageMessages.push(message);
+    },
     fetch() {
+      fetchCallCount += 1;
       return Promise.resolve(new Response(originalBody, {
         status: 200,
         headers: { "content-type": "application/json" }
@@ -111,6 +118,15 @@ function createHarness(originalBody) {
     errors: errors,
     FakeXHR: FakeXHR,
     window: windowObject,
+    getFetchCallCount() {
+      return fetchCallCount;
+    },
+    getXhrSendCount() {
+      return xhrSendCount;
+    },
+    getPageMessages() {
+      return pageMessages.slice();
+    },
     setRules(rules) {
       messageListeners.forEach(function (listener) {
         listener({
@@ -167,6 +183,29 @@ test("legacy rules default to exact URL matching and whole-body replacement", as
     await harness.fetchText("https://api.example.com/api/users/1234"),
     "original"
   );
+});
+
+test("mock-fetch returns directly without calling the native fetch", async function () {
+  const harness = createHarness("server response");
+  harness.setRules([createRule({
+    rewrite: {
+      mode: "mock-fetch",
+      body: "{\"source\":\"local\"}"
+    }
+  })]);
+
+  assert.equal(
+    await harness.fetchText("https://api.example.com/api/users/123"),
+    "{\"source\":\"local\"}"
+  );
+  assert.equal(harness.getFetchCallCount(), 0);
+
+  const hit = harness.getPageMessages().find(function (message) {
+    return message && message.type === "RULE_HIT";
+  });
+  assert.equal(hit.outcome, "mock-fetch");
+  assert.equal(hit.originalResponse, "");
+  assert.equal(hit.rewrittenResponse, "{\"source\":\"local\"}");
 });
 
 test("contains matching checks the URL without query parameters", async function () {
@@ -325,4 +364,28 @@ test("XHR uses the same matching and transformation behavior", function () {
     profile: { name: "Ada", role: "admin" }
   });
   assert.equal(xhr.response, xhr.responseText);
+});
+
+test("mock-fetch lets XHR reach the server and records a passthrough warning", function () {
+  const harness = createHarness("server response");
+  harness.setRules([createRule({
+    rewrite: {
+      mode: "mock-fetch",
+      body: "fetch-only response"
+    }
+  })]);
+
+  const xhr = new harness.FakeXHR();
+  xhr.open("GET", "https://api.example.com/api/users/123");
+  xhr.send();
+
+  assert.equal(harness.getXhrSendCount(), 1);
+  assert.equal(xhr.responseText, "server response");
+
+  const hit = harness.getPageMessages().find(function (message) {
+    return message && message.type === "RULE_HIT";
+  });
+  assert.equal(hit.outcome, "xhr-passthrough");
+  assert.equal(hit.originalResponse, "server response");
+  assert.equal(hit.rewrittenResponse, "server response");
 });
