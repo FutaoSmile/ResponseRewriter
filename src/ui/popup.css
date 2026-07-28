@@ -1914,13 +1914,6 @@ html[data-theme="dark"] .confirm-dialog.is-neutral .confirm-dialog-warning {
   white-space: nowrap;
 }
 
-.scope-note {
-  margin: 10px 4px -6px;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
 .visually-hidden {
   position: absolute;
   width: 1px;

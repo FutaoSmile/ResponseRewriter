@@ -3,6 +3,14 @@
   "name": "ResponseRewriter",
   "version": "0.1.0",
   "description": "Intercepts XHR/fetch responses in the page context and rewrites them with configurable rules.",
+  "icons": {
+    "16": "src/icons/icon-16.png",
+    "32": "src/icons/icon-32.png",
+    "48": "src/icons/icon-48.png",
+    "128": "src/icons/icon-128.png"
+  },
+  "author": "FutaoSmile",
+  "homepage_url": "https://github.com/FutaoSmile/ResponseRewriter",
   "permissions": [
     "storage"
   ],
@@ -10,7 +18,11 @@
     "<all_urls>"
   ],
   "action": {
-    "default_title": "ResponseRewriter"
+    "default_title": "ResponseRewriter",
+    "default_icon": {
+      "16": "src/icons/icon-16.png",
+      "32": "src/icons/icon-32.png"
+    }
   },
   "background": {
     "service_worker": "src/background.js"

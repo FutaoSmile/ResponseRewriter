@@ -17,7 +17,7 @@
           <div class="header-interception">
             <div class="header-interception-label">
               <span id="interceptionEnabledLabel" data-i18n="interception">全局拦截</span>
-              <button type="button" class="header-help-button" aria-label="查看全局拦截说明" data-i18n-aria-label="interceptionHelp" data-tooltip="关闭后所有规则暂停生效，但不会删除规则和日志。" data-i18n-tooltip="interceptionHint">
+              <button type="button" class="header-help-button" aria-label="查看运行范围与全局拦截说明" data-i18n-aria-label="interceptionHelp" data-tooltip="扩展会在所有 URL 和子 frame 中运行；关闭全局开关后所有规则暂停生效，但不会删除规则和日志。" data-i18n-tooltip="globalScopeHint">
                 <svg viewBox="0 0 16 16" aria-hidden="true">
                   <circle cx="8" cy="8" r="6.25"></circle>
                   <path d="M8 7.25v4M8 4.75h.01"></path>
@@ -51,7 +51,6 @@
           </label>
         </div>
       </header>
-      <p class="scope-note" data-i18n="globalScopeHint">扩展会在所有 URL 和子 frame 中运行；可随时使用顶部开关暂停全部拦截。</p>
 
       <section class="manager-layout">
         <!-- Left: Rules -->

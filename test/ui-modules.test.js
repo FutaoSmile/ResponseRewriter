@@ -451,7 +451,7 @@ test("global interception control explains its impact without changing header de
   const styles = fs.readFileSync(path.join(uiDirectory, "popup.css"), "utf8");
   const popupSource = fs.readFileSync(path.join(uiDirectory, "popup.js"), "utf8");
 
-  assert.match(managerSource, /class="header-help-button"[^>]*data-i18n-tooltip="interceptionHint"/);
+  assert.match(managerSource, /class="header-help-button"[^>]*data-i18n-tooltip="globalScopeHint"/);
   assert.match(managerSource, /id="interceptionHint" class="visually-hidden"[^>]*data-i18n="interceptionHint"/);
   assert.match(managerSource, /id="interceptionEnabled"[^>]*aria-describedby="interceptionHint"/);
   assert.match(styles, /\.header-interception-control\s*\{[^{}]*min-height:\s*var\(--compact-control-height\);[^{}]*border-radius:\s*var\(--radius-sm\);/);

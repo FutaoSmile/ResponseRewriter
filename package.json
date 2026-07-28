@@ -1,0 +1,29 @@
+{
+  "name": "response-rewriter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A Chrome extension for intercepting and rewriting XHR / Fetch responses with configurable rules.",
+  "scripts": {
+    "test": "node --test",
+    "icons": "node scripts/gen-icons.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FutaoSmile/ResponseRewriter.git"
+  },
+  "keywords": [
+    "chrome-extension",
+    "xhr",
+    "fetch",
+    "intercept",
+    "rewrite",
+    "mock",
+    "devtools"
+  ],
+  "author": "FutaoSmile",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/FutaoSmile/ResponseRewriter/issues"
+  },
+  "homepage": "https://github.com/FutaoSmile/ResponseRewriter#readme"
+}

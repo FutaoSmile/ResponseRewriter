@@ -1307,17 +1307,17 @@ elements.ruleForm.addEventListener("submit", function (event) {
       });
     }
 
-    elements.saveButton.disabled = true;
+    if (elements.saveButton) elements.saveButton.disabled = true;
     saveRules(
       t(modalMode === "create" ? "ruleCreated" : "ruleSaved"),
       nextRules,
       function () {
-        elements.saveButton.disabled = false;
+        if (elements.saveButton) elements.saveButton.disabled = false;
         ruleModalSnapshot = getRuleFormSnapshot();
         closeRuleModal();
       },
       function () {
-        elements.saveButton.disabled = false;
+        if (elements.saveButton) elements.saveButton.disabled = false;
       }
     );
   } catch (error) {
