@@ -5,14 +5,16 @@
   const PAGE_SOURCE = "response-rewriter-page";
   const MAX_LOGS = 100;
   const MAX_RESPONSE_LENGTH = 20000;
+  const INTERCEPTION_ENABLED_KEY = "interceptionEnabled";
 
   function createRuleId() {
     return "rule-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
   }
 
   function normalizeRule(rule, index) {
-    // Rules may come from older storage/export formats. Normalize at the bridge so
-    // the page-world interceptor only needs to handle one stable rule shape.
+    // Rules may come from older storage/export formats, including the retired
+    // match.domain field. Normalize at the bridge and omit that field so legacy
+    // rules no longer retain a hidden site restriction in the page world.
     const match = rule && rule.match && typeof rule.match === "object" ? rule.match : {};
     const rewrite = rule && rule.rewrite && typeof rule.rewrite === "object" ? rule.rewrite : {};
 
@@ -75,7 +77,7 @@
     (document.documentElement || document.head || document.body).appendChild(script);
   }
 
-  function sendRulesToPage(rules) {
+  function sendRulesToPage(rules, interceptionEnabled) {
     // window.postMessage is used because extension APIs are unavailable in the page
     // world. SOURCE is checked by the receiver since "*" is required for same-window
     // pages whose origin may vary during document_start.
@@ -83,16 +85,17 @@
       {
         source: SOURCE,
         type: "SET_RULES",
-        rules: rules
+        rules: rules,
+        interceptionEnabled: interceptionEnabled !== false
       },
       "*"
     );
   }
 
   function loadRulesAndSync() {
-    chrome.storage.local.get({ rules: [] }, function (result) {
+    chrome.storage.local.get({ rules: [], [INTERCEPTION_ENABLED_KEY]: true }, function (result) {
       const normalized = normalizeRules(result.rules);
-      sendRulesToPage(normalized);
+      sendRulesToPage(normalized, result[INTERCEPTION_ENABLED_KEY]);
     });
   }
 
@@ -128,6 +131,8 @@
         });
       });
 
+      const originalResponse = typeof hit.originalResponse === "string" ? hit.originalResponse : "";
+      const rewrittenResponse = typeof hit.rewrittenResponse === "string" ? hit.rewrittenResponse : "";
       const nextLogs = [
         {
           id: "log-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
@@ -138,23 +143,34 @@
           method: hit.method || "",
           resourceType: hit.resourceType || "",
           outcome: hit.outcome || "rewritten",
-          originalResponse: truncateText(hit.originalResponse),
-          rewrittenResponse: truncateText(hit.rewrittenResponse)
+          errorMessage: hit.errorMessage || "",
+          originalResponse: truncateText(originalResponse),
+          rewrittenResponse: truncateText(rewrittenResponse),
+          originalResponseLength: originalResponse.length,
+          rewrittenResponseLength: rewrittenResponse.length,
+          originalResponseTruncated: originalResponse.length > MAX_RESPONSE_LENGTH,
+          rewrittenResponseTruncated: rewrittenResponse.length > MAX_RESPONSE_LENGTH
         }
       ].concat(Array.isArray(result.logs) ? result.logs : []).slice(0, MAX_LOGS);
 
-      chrome.storage.local.set({ rules: nextRules, logs: nextLogs });
+      chrome.storage.local.set({ rules: nextRules, logs: nextLogs }, function () {
+        if (chrome.runtime.lastError) {
+          // The page request has already completed, so storage cannot be retried
+          // safely here. Surface the failure instead of silently losing the hit.
+          console.error("ResponseRewriter could not save the intercept log:", chrome.runtime.lastError.message);
+        }
+      });
     });
   }
 
   loadRulesAndSync();
 
   chrome.storage.onChanged.addListener(function (changes, areaName) {
-    if (areaName !== "local" || !changes.rules) {
+    if (areaName !== "local" || (!changes.rules && !changes[INTERCEPTION_ENABLED_KEY])) {
       return;
     }
 
-    sendRulesToPage(normalizeRules(changes.rules.newValue));
+    loadRulesAndSync();
   });
 
   window.addEventListener("message", function (event) {

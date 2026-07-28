@@ -25,6 +25,9 @@ It is designed for local development, debugging, frontend integration testing, m
 - **XHR and Fetch interception**: Rewrite responses from both `XMLHttpRequest` and `fetch`.
 - **Multiple URL match modes**: Use exact, substring, or regular-expression matching while ignoring query parameters.
 - **Multiple response modes**: Replace the whole body, merge JSON objects, or run a JavaScript transform.
+- **Controllable execution order**: Rules run from top to bottom and can be reordered. `mock-fetch` uses the first matching rule.
+- **Global pause**: Pause all interception with the switch at the top.
+- **Rule search and filters**: Find rules by name, method, URL, status, or response mode.
 - **Live rule sync**: Saved rules are synchronized to opened pages immediately.
 - **Hit statistics**: Count each rule's hits from its currently retained intercept logs, and track the last matched URL, matched time, and resource type.
 - **Response diff view**: Align original and rewritten responses by line and highlight additions, removals, and replacements.
@@ -41,6 +44,8 @@ It is designed for local development, debugging, frontend integration testing, m
 5. Select the project directory.
 6. Click the extension icon to open the manager page.
 
+On first install, the extension initializes four disabled example rules and four records marked as example logs. Together they cover exact, substring, and regular-expression matching plus whole-body replacement, JSON merge, JavaScript transform, and direct Fetch interception. Example logs do not count as real hits, and upgrades or existing local data are never overwritten.
+
 ## Usage
 
 1. Open the extension manager page.
@@ -50,6 +55,11 @@ It is designed for local development, debugging, frontend integration testing, m
 5. Save the rule.
 6. Refresh or continue using the target page. Regular rules rewrite matching XHR / Fetch responses; direct-return rules prevent matching Fetch requests from reaching the server.
 7. Check hit counts and logs in the manager page. An XHR matching a direct-return rule still reaches the server and receives a prominent warning label.
+8. When several rules match the same request, regular rules run from top to bottom. Drag the handle at the left of a rule name to reorder it. For keyboard sorting, focus the handle and press `Alt+Up/Down Arrow`.
+
+Use the **Interception** switch at the top to pause or resume all rules. While paused, the extension badge shows `OFF` and page requests remain unchanged. The extension runs on all URLs and child frames; pause interception before working on sensitive pages.
+
+Before an import is applied, the manager shows the number of incoming rules and ID conflicts. Imported rules receive new IDs and are added to the top without overwriting existing rules.
 
 ### URL Match Modes
 
@@ -80,6 +90,7 @@ JavaScript transforms receive these parameters:
   - `context.resourceType`: `xhr` or `fetch`.
 
 JavaScript transforms may return a string or JSON value. If a transform throws, the original response is preserved and the error is written to the page console.
+The manager also records a “Processing failed” log with the error reason. A match that produces identical content is recorded as “Matched · unchanged.”
 
 ### Viewing Response Differences
 
@@ -167,12 +178,16 @@ node --test
 ├── manifest.json       # Chrome extension manifest
 ├── src                 # Extension source code
 │   ├── background.js   # Opens manager page and updates extension badge
+│   ├── default-data.js # Default example rules and logs for first install
 │   ├── content.js      # Bridges extension storage and page-context script
 │   ├── injected.js     # Hooks XHR / Fetch in the page context
-│   └── ui              # Manager and popup pages
+│   └── ui              # Manager page
+│       ├── manager.html # Manager page structure
+│       ├── popup.css   # Manager design system and responsive styles
 │       ├── i18n.js     # Localized copy and translation helpers
 │       ├── rule-model.js # Rule normalization and validation
 │       ├── log-view.js # Log list and detail rendering
+│       ├── vendor      # Bundled third-party dependency and license
 │       └── popup.js    # Page state and event coordination
 ├── examples            # Example rules
 ├── docs                # Project documentation and review records
@@ -181,19 +196,20 @@ node --test
 
 ## Permissions
 
-- `storage`: stores rules, logs, locale, and theme locally.
+- `storage`: stores rules, logs, global interception state, locale, and theme locally.
 - `<all_urls>`: allows the content script to run on pages where request interception is needed.
 
 ## Notes and Limitations
 
 - URL matching ignores query parameters.
 - Rules are stored locally in Chrome extension storage.
+- Only the latest 100 intercept logs are retained. Each original or processed response stores up to 20,000 characters; the detail view shows truncation and original lengths.
 - The extension rewrites text-based responses. Binary responses are not targeted.
 - `mock-fetch` intercepts Fetch in the page context only. It does not intercept XHR, workers, `sendBeacon`, or resource requests from HTML elements.
 - When `mock-fetch` matches, it does not call the native Fetch implementation, so the request never enters Chrome's network stack and does not appear in the DevTools Network panel. Use the extension's interception log to inspect the match.
 - `mock-fetch` currently returns HTTP 200 with `application/json; charset=utf-8`.
 - JSON merge requires both the original response and configured content to be JSON objects.
-- JavaScript transforms use `new Function`. If the target page CSP blocks dynamic code execution, the original response is preserved.
+- JavaScript transforms use `new Function`. If the target page CSP blocks dynamic code execution, the original response is preserved and a failure log is recorded.
 - Transform scripts run in the page context. Only use scripts you wrote or have reviewed.
 - This tool is intended for development and testing. Review your rules before enabling it on sensitive pages.
 
@@ -204,3 +220,5 @@ Issues and pull requests are welcome. Please keep changes focused and consistent
 ## License
 
 No license has been specified yet.
+
+Rule drag sorting uses the locally bundled SortableJS 1.15.7 component under the MIT License. Its license text is stored at `src/ui/vendor/SORTABLE-LICENSE.txt`.

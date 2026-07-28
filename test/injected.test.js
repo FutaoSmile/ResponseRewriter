@@ -127,14 +127,15 @@ function createHarness(originalBody) {
     getPageMessages() {
       return pageMessages.slice();
     },
-    setRules(rules) {
+    setRules(rules, interceptionEnabled) {
       messageListeners.forEach(function (listener) {
         listener({
           source: windowObject,
           data: {
             source: "response-rewriter-extension",
             type: "SET_RULES",
-            rules: rules
+            rules: rules,
+            interceptionEnabled: interceptionEnabled !== false
           }
         });
       });
@@ -206,6 +207,25 @@ test("mock-fetch returns directly without calling the native fetch", async funct
   assert.equal(hit.outcome, "mock-fetch");
   assert.equal(hit.originalResponse, "");
   assert.equal(hit.rewrittenResponse, "{\"source\":\"local\"}");
+});
+
+test("mock-fetch uses the first matching rule in visible list order", async function () {
+  const harness = createHarness("server response");
+  harness.setRules([
+    createRule({
+      id: "first",
+      rewrite: { mode: "mock-fetch", body: "first response" }
+    }),
+    createRule({
+      id: "second",
+      rewrite: { mode: "mock-fetch", body: "second response" }
+    })
+  ]);
+
+  assert.equal(
+    await harness.fetchText("https://api.example.com/api/users/123"),
+    "first response"
+  );
 });
 
 test("contains matching checks the URL without query parameters", async function () {
@@ -342,6 +362,76 @@ test("JavaScript transform errors keep the original response", async function ()
     JSON.stringify({ name: "Ada" })
   );
   assert.equal(harness.errors.length, 1);
+  const hit = harness.getPageMessages().find(function (message) {
+    return message && message.type === "RULE_HIT";
+  });
+  assert.equal(hit.outcome, "rewrite-failed");
+  assert.match(hit.errorMessage, /expected failure/);
+});
+
+test("paused interception bypasses all matching rules", async function () {
+  const harness = createHarness("server response");
+  harness.setRules([createRule({
+    rewrite: { mode: "mock-fetch", body: "local response" }
+  })], false);
+
+  assert.equal(
+    await harness.fetchText("https://api.example.com/api/users/123"),
+    "server response"
+  );
+  assert.equal(harness.getFetchCallCount(), 1);
+  assert.equal(
+    harness.getPageMessages().filter(function (message) {
+      return message && message.type === "RULE_HIT";
+    }).length,
+    0
+  );
+});
+
+test("legacy site scope data no longer limits matching", async function () {
+  const harness = createHarness("original");
+  harness.setRules([createRule({
+    match: {
+      method: "GET",
+      urlMode: "contains",
+      url: "/api/users/",
+      domain: "example.com"
+    }
+  })]);
+
+  assert.equal(
+    await harness.fetchText("https://api.example.com/api/users/123"),
+    "rewritten"
+  );
+  assert.equal(
+    await harness.fetchText("https://example.net/api/users/123"),
+    "rewritten"
+  );
+});
+
+test("matching rewrite rules run in visible list order", async function () {
+  const harness = createHarness('{"steps":[]}');
+  harness.setRules([
+    createRule({
+      id: "first",
+      rewrite: {
+        mode: "script",
+        body: "const data = JSON.parse(originalResponse); data.steps.push('first'); return data;"
+      }
+    }),
+    createRule({
+      id: "second",
+      rewrite: {
+        mode: "script",
+        body: "const data = JSON.parse(originalResponse); data.steps.push('second'); return data;"
+      }
+    })
+  ]);
+
+  assert.deepEqual(
+    JSON.parse(await harness.fetchText("https://api.example.com/api/users/123")),
+    { steps: ["first", "second"] }
+  );
 });
 
 test("XHR uses the same matching and transformation behavior", function () {

@@ -73,8 +73,9 @@ function getExportRulesPayload() {
 
 
 function normalizeRule(rule, index) {
-  // Storage and imported files can contain pre-urlMode/pre-rewriteMode rules.
-  // Defaults preserve their historical exact-match and whole-body-replace behavior.
+  // Storage and imported files can contain pre-urlMode/pre-rewriteMode rules or the
+  // retired match.domain field. Omit that field so legacy rules no longer retain a
+  // hidden site restriction, while preserving their historical mode defaults.
   const match = rule && rule.match && typeof rule.match === "object" ? rule.match : {};
   const rewrite = rule && rule.rewrite && typeof rule.rewrite === "object" ? rule.rewrite : {};
 
@@ -111,19 +112,46 @@ function normalizeRules(inputRules) {
   return source.map(normalizeRule);
 }
 
+function reorderRulesByVisiblePositions(allRules, visibleRules, fromIndex, toIndex) {
+  if (
+    fromIndex === toIndex ||
+    fromIndex < 0 ||
+    toIndex < 0 ||
+    fromIndex >= visibleRules.length ||
+    toIndex >= visibleRules.length
+  ) {
+    return allRules.slice();
+  }
+
+  var reorderedVisibleRules = visibleRules.slice();
+  var movedRule = reorderedVisibleRules.splice(fromIndex, 1)[0];
+  reorderedVisibleRules.splice(toIndex, 0, movedRule);
+
+  var visibleIds = new Set(visibleRules.map(function (rule) { return rule.id; }));
+  var visibleIndex = 0;
+  return allRules.map(function (rule) {
+    return visibleIds.has(rule.id) ? reorderedVisibleRules[visibleIndex++] : rule;
+  });
+}
+
+function createRuleValidationError(message, field) {
+  var error = new Error(message);
+  error.field = field;
+  return error;
+}
 
 function validateRule(rule) {
   if (!rule.name.trim()) {
-    throw new Error(t("ruleNameRequired"));
+    throw createRuleValidationError(t("ruleNameRequired"), "ruleName");
   }
   if (!rule.match.url.trim()) {
-    throw new Error(t("urlRequired"));
+    throw createRuleValidationError(t("urlRequired"), "urlMatchValue");
   }
   if (rule.match.urlMode === "regex") {
     try {
       new RegExp(rule.match.url);
     } catch (error) {
-      throw new Error(t("invalidRegex", { message: error.message }));
+      throw createRuleValidationError(t("invalidRegex", { message: error.message }), "urlMatchValue");
     }
   }
   if (rule.rewrite.mode === "json-merge") {
@@ -133,7 +161,7 @@ function validateRule(rule) {
         throw new Error();
       }
     } catch (error) {
-      throw new Error(t("mergeBodyMustBeObject"));
+      throw createRuleValidationError(t("mergeBodyMustBeObject"), "rewriteBody");
     }
   }
 }

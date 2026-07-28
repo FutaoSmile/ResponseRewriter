@@ -1,16 +1,16 @@
 [
   {
-    "id": "rule-profile-001",
-    "enabled": true,
-    "name": "改写用户信息接口",
+    "id": "example-replace-exact",
+    "enabled": false,
+    "name": "[示例] 完整替换 · 精确匹配",
     "match": {
       "method": "GET",
       "urlMode": "exact",
-      "url": "/api/user/profile"
+      "url": "https://api.example.com/api/profile"
     },
     "rewrite": {
       "mode": "replace",
-      "body": "{\n  \"nickname\": \"mocked-by-extension\"\n}"
+      "body": "{\n  \"id\": 42,\n  \"nickname\": \"mocked-user\",\n  \"role\": \"tester\"\n}"
     },
     "stats": {
       "hitCount": 0,
@@ -20,17 +20,57 @@
     }
   },
   {
-    "id": "rule-config-002",
-    "enabled": true,
-    "name": "直接返回本地配置",
+    "id": "example-json-merge-contains",
+    "enabled": false,
+    "name": "[示例] JSON 局部合并 · 包含匹配",
     "match": {
       "method": "GET",
+      "urlMode": "contains",
+      "url": "/api/users/"
+    },
+    "rewrite": {
+      "mode": "json-merge",
+      "body": "{\n  \"data\": {\n    \"role\": \"admin\",\n    \"featureEnabled\": true\n  }\n}"
+    },
+    "stats": {
+      "hitCount": 0,
+      "lastMatchedAt": "",
+      "lastMatchedUrl": "",
+      "lastResourceType": ""
+    }
+  },
+  {
+    "id": "example-script-regex",
+    "enabled": false,
+    "name": "[示例] JavaScript 转换 · 正则匹配",
+    "match": {
+      "method": "",
+      "urlMode": "regex",
+      "url": "^https://api\\.example\\.com/api/orders/\\d+$"
+    },
+    "rewrite": {
+      "mode": "script",
+      "body": "const data = JSON.parse(originalResponse);\ndata.debug = true;\ndata.resourceType = context.resourceType;\nreturn data;"
+    },
+    "stats": {
+      "hitCount": 0,
+      "lastMatchedAt": "",
+      "lastMatchedUrl": "",
+      "lastResourceType": ""
+    }
+  },
+  {
+    "id": "example-mock-fetch",
+    "enabled": false,
+    "name": "[示例] 拦截 Fetch · 直接返回",
+    "match": {
+      "method": "POST",
       "urlMode": "exact",
       "url": "/api/config"
     },
     "rewrite": {
       "mode": "mock-fetch",
-      "body": "{\n  \"debug\": true,\n  \"source\": \"local\"\n}"
+      "body": "{\n  \"debug\": true,\n  \"source\": \"local\",\n  \"serverRequested\": false\n}"
     },
     "stats": {
       "hitCount": 0,

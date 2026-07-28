@@ -31,7 +31,7 @@ function getPageItems(items, page, pageSize) {
 
 function getRuleLogs(items, ruleId) {
   return items.filter(function (log) {
-    return log.ruleId === ruleId;
+    return log.ruleId === ruleId && !log.isExample;
   });
 }
 
@@ -95,7 +95,7 @@ function renderLogList() {
   elements.logList.innerHTML = "";
   syncLogFilterInputs();
   if (elements.clearLogsButton) {
-    elements.clearLogsButton.style.display = logs.length > 0 ? "" : "none";
+    elements.clearLogsButton.hidden = logs.length === 0;
   }
 
   var filteredLogs = getFilteredLogs();
@@ -103,32 +103,37 @@ function renderLogList() {
   logPage = paged.page;
 
   if (!logs.length) {
-    var empty = document.createElement("div");
-    empty.className = "empty-state";
-    empty.textContent = t("emptyLogs");
-    elements.logList.appendChild(empty);
+    elements.logList.appendChild(createEmptyState(
+      t("emptyLogs"),
+      rules.length ? "" : t("addFirstRule"),
+      rules.length ? null : function () { openRuleModal("create", createBlankRule()); }
+    ));
     renderPagination(elements.logPageInfo, elements.logPrevPageButton, elements.logNextPageButton, 1, 1, 0, true);
     return;
   }
 
   if (!filteredLogs.length) {
-    var filteredEmpty = document.createElement("div");
-    filteredEmpty.className = "empty-state";
-    filteredEmpty.textContent = t("emptyFilteredLogs");
-    elements.logList.appendChild(filteredEmpty);
+    elements.logList.appendChild(createEmptyState(t("emptyFilteredLogs"), t("clearFilters"), function () {
+      logFilters = { keyword: "", resourceType: "" };
+      logPage = 1;
+      renderLogList();
+    }));
     renderPagination(elements.logPageInfo, elements.logPrevPageButton, elements.logNextPageButton, 1, 1, 0, true);
     return;
   }
 
-  paged.items.forEach(function (log, index) {
-    var card = document.createElement("div");
-    card.className = "log-card" + (log.outcome === "xhr-passthrough" ? " is-warning" : "");
-    card.style.animationDelay = (index * 0.04) + "s";
+  paged.items.forEach(function (log) {
+    var card = document.createElement("button");
+    card.type = "button";
+    card.className = "log-card" +
+      (log.outcome === "xhr-passthrough" ? " is-warning" : "") +
+      (log.outcome === "rewrite-failed" ? " is-error" : "");
     card.dataset.logId = log.id;
     card.innerHTML =
       '<div class="log-card-url">' + escapeHtml(log.url || "-") + '</div>' +
       '<div class="log-card-meta">' +
         '<span>' + escapeHtml(log.method || "-") + '</span>' +
+        renderExampleLogBadge(log) +
         renderLogOutcomeBadge(log) +
         '<span class="sep"></span>' +
         '<span>' + escapeHtml(log.ruleName || "-") + '</span>' +
@@ -319,26 +324,69 @@ function renderLogOutcomeBadge(log) {
     return "";
   }
 
-  var isPassthrough = log.outcome === "xhr-passthrough";
-  return '<span class="log-outcome-badge ' + (isPassthrough ? "is-warning" : "is-success") + '">' +
-    t(isPassthrough ? "logOutcomeXhrPassthrough" : "logOutcomeMockFetch") +
+  var key = log.outcome === "xhr-passthrough"
+    ? "logOutcomeXhrPassthrough"
+    : (log.outcome === "mock-fetch"
+      ? "logOutcomeMockFetch"
+      : (log.outcome === "rewrite-failed" ? "logOutcomeRewriteFailed" : "logOutcomeUnchanged"));
+  var state = log.outcome === "rewrite-failed"
+    ? "is-error"
+    : (log.outcome === "xhr-passthrough" ? "is-warning" : (log.outcome === "unchanged" ? "is-neutral" : "is-success"));
+  return '<span class="log-outcome-badge ' + state + '">' +
+    t(key) +
     '</span>';
 }
 
-function renderLogOutcomeNotice(outcome) {
-  if (outcome !== "mock-fetch" && outcome !== "xhr-passthrough") {
+function renderExampleLogBadge(log) {
+  return log && log.isExample
+    ? '<span class="log-outcome-badge is-neutral">' + t("exampleLog") + '</span>'
+    : "";
+}
+
+function renderLogOutcomeNotice(log) {
+  var outcome = log && log.outcome;
+  if (outcome !== "mock-fetch" &&
+      outcome !== "xhr-passthrough" &&
+      outcome !== "rewrite-failed" &&
+      outcome !== "unchanged") {
     return "";
   }
 
-  var isPassthrough = outcome === "xhr-passthrough";
-  return '<div class="log-outcome-notice ' + (isPassthrough ? "is-warning" : "is-success") + '">' +
-    '<strong>' + t(isPassthrough ? "logOutcomeXhrPassthrough" : "logOutcomeMockFetch") + '</strong>' +
-    '<span>' + t(isPassthrough ? "logNoticeXhrPassthrough" : "logNoticeMockFetch") + '</span>' +
+  var badge = renderLogOutcomeBadge(log);
+  var noticeKey = outcome === "xhr-passthrough"
+    ? "logNoticeXhrPassthrough"
+    : (outcome === "mock-fetch"
+      ? "logNoticeMockFetch"
+      : (outcome === "rewrite-failed" ? "logNoticeRewriteFailed" : "logNoticeUnchanged"));
+  var state = outcome === "rewrite-failed"
+    ? "is-error"
+    : (outcome === "xhr-passthrough" ? "is-warning" : (outcome === "unchanged" ? "is-neutral" : "is-success"));
+  var errorDetail = outcome === "rewrite-failed" && log.errorMessage
+    ? '<code>' + escapeHtml(log.errorMessage) + '</code>'
+    : "";
+  return '<div class="log-outcome-notice ' + state + '">' +
+    badge +
+    '<span>' + t(noticeKey) + '</span>' +
+    errorDetail +
+    '</div>';
+}
+
+function renderTruncationNotice(log) {
+  if (!log || (!log.originalResponseTruncated && !log.rewrittenResponseTruncated)) {
+    return "";
+  }
+
+  return '<div class="log-truncation-notice">' +
+    t("logTruncatedNotice", {
+      limit: 20000,
+      originalLength: Number(log.originalResponseLength) || 0,
+      rewrittenLength: Number(log.rewrittenResponseLength) || 0
+    }) +
     '</div>';
 }
 
 /* Shared log detail renderer — used by log modal & hits modal */
-function renderLogDetailHTML(original, rewritten, outcome) {
+function renderLogDetailHTML(original, rewritten, outcome, log) {
   var diff = createLineDiff(original, rewritten);
   var hasChanges = diff.addedCount > 0 || diff.removedCount > 0;
   var rows = diff.rows.map(function (row) {
@@ -349,7 +397,8 @@ function renderLogDetailHTML(original, rewritten, outcome) {
   }).join("");
 
   return '<section class="response-diff" data-log-detail>' +
-    renderLogOutcomeNotice(outcome) +
+    renderLogOutcomeNotice(log || { outcome: outcome }) +
+    renderTruncationNotice(log) +
     '<div class="diff-summary">' +
       '<strong>' + t(hasChanges ? "diffChanged" : "diffNoChanges") + '</strong>' +
       '<div class="diff-stats">' +
@@ -374,6 +423,7 @@ function openLogModal(log) {
       '<span class="log-meta-tag">' + t("time") + ' <strong>' + formatDate(log.matchedAt) + '</strong></span>' +
       '<span class="log-meta-tag">' + t("method") + ' <strong>' + escapeHtml(log.method || "-") + '</strong></span>' +
       '<span class="log-meta-tag">' + t("type") + ' <strong>' + escapeHtml(log.resourceType || "-") + '</strong></span>' +
+      renderExampleLogBadge(log) +
       renderLogOutcomeBadge(log) +
       '<span class="log-meta-tag log-meta-tag-url" title="' + escapeHtml(log.url || "") + '">URL <strong>' + escapeHtml(log.url || "-") + '</strong></span>';
   } else {
@@ -384,13 +434,11 @@ function openLogModal(log) {
   if (currentDetail) currentDetail.remove();
   elements.logModal.querySelector(".modal-card").insertAdjacentHTML(
     "beforeend",
-    renderLogDetailHTML(log.originalResponse, log.rewrittenResponse, log.outcome)
+    renderLogDetailHTML(log.originalResponse, log.rewrittenResponse, log.outcome, log)
   );
-  elements.logModal.classList.remove("hidden");
-  elements.logModal.setAttribute("aria-hidden", "false");
+  showModal(elements.logModal, elements.closeLogModalButton);
 }
 
 function closeLogModal() {
-  elements.logModal.classList.add("hidden");
-  elements.logModal.setAttribute("aria-hidden", "true");
+  hideModal(elements.logModal);
 }

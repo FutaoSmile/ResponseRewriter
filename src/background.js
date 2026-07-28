@@ -1,3 +1,5 @@
+importScripts("default-data.js");
+
 function normalizeRules(rules) {
   return Array.isArray(rules) ? rules : [];
 }
@@ -20,16 +22,44 @@ function toBadgeText(count) {
   return String(count);
 }
 
-function updateBadgeFromRules(rules) {
+function updateBadgeFromRules(rules, interceptionEnabled) {
   const total = getTotalHitCount(rules);
-  chrome.action.setBadgeBackgroundColor({ color: "#175cd3" });
+  const paused = interceptionEnabled === false;
+  chrome.action.setBadgeBackgroundColor({ color: paused ? "#64748b" : "#175cd3" });
   chrome.action.setBadgeTextColor({ color: "#ffffff" });
-  chrome.action.setBadgeText({ text: toBadgeText(total) });
+  chrome.action.setBadgeText({ text: paused ? "OFF" : toBadgeText(total) });
+  chrome.action.setTitle({ title: paused ? "ResponseRewriter · Paused" : "ResponseRewriter" });
 }
 
 function refreshBadge() {
-  chrome.storage.local.get({ rules: [] }, function (result) {
-    updateBadgeFromRules(result.rules);
+  chrome.storage.local.get({ rules: [], interceptionEnabled: true }, function (result) {
+    updateBadgeFromRules(result.rules, result.interceptionEnabled);
+  });
+}
+
+function handleInstalled(details) {
+  if (!details || details.reason !== "install") {
+    refreshBadge();
+    return;
+  }
+
+  // Installation defaults are only written for missing keys. This keeps unpacked
+  // reloads and unusual restored profiles from losing data that already exists.
+  chrome.storage.local.get({ rules: null, logs: null }, function (result) {
+    var defaults = {};
+    if (!Array.isArray(result.rules)) {
+      defaults.rules = ResponseRewriterDefaults.createRules();
+    }
+    if (!Array.isArray(result.logs)) {
+      defaults.logs = ResponseRewriterDefaults.createLogs();
+    }
+
+    if (!Object.keys(defaults).length) {
+      refreshBadge();
+      return;
+    }
+
+    chrome.storage.local.set(defaults, refreshBadge);
   });
 }
 
@@ -49,13 +79,13 @@ chrome.runtime.onMessage.addListener(function (message) {
   });
 });
 
-chrome.runtime.onInstalled.addListener(refreshBadge);
+chrome.runtime.onInstalled.addListener(handleInstalled);
 chrome.runtime.onStartup.addListener(refreshBadge);
 
 chrome.storage.onChanged.addListener(function (changes, areaName) {
-  if (areaName !== "local" || !changes.rules) {
+  if (areaName !== "local" || (!changes.rules && !changes.interceptionEnabled)) {
     return;
   }
 
-  updateBadgeFromRules(changes.rules.newValue);
+  refreshBadge();
 });

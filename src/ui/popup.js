@@ -2,6 +2,7 @@ const RULES_PAGE_SIZE = 10;
 const LOGS_PAGE_SIZE = 10;
 const DEFAULT_THEME = "light";
 const THEME_STORAGE_KEY = "theme";
+const INTERCEPTION_ENABLED_KEY = "interceptionEnabled";
 const elements = {
   ruleList: document.getElementById("ruleList"),
   logList: document.getElementById("logList"),
@@ -58,8 +59,21 @@ const elements = {
   themeSelect: document.getElementById("themeSelect")
 };
 
+elements.interceptionEnabled = document.getElementById("interceptionEnabled");
+elements.interceptionStatusText = document.getElementById("interceptionStatusText");
+elements.ruleSearchInput = document.getElementById("ruleSearchInput");
+elements.ruleStatusFilter = document.getElementById("ruleStatusFilter");
+elements.ruleModeFilter = document.getElementById("ruleModeFilter");
+elements.clearRuleFiltersButton = document.getElementById("clearRuleFiltersButton");
+elements.cancelRuleButton = document.getElementById("cancelRuleButton");
+elements.ruleNameError = document.getElementById("ruleNameError");
+elements.urlMatchError = document.getElementById("urlMatchError");
+elements.rewriteBodyError = document.getElementById("rewriteBodyError");
+elements.uiTooltip = document.getElementById("uiTooltip");
+
 let currentLocale = DEFAULT_LOCALE;
 let currentTheme = DEFAULT_THEME;
+let interceptionEnabled = true;
 let rules = [];
 let editingRuleId = "";
 let deleteRuleId = "";
@@ -70,8 +84,17 @@ let logFilters = {
   keyword: "",
   resourceType: ""
 };
+let ruleFilters = {
+  keyword: "",
+  status: "",
+  mode: ""
+};
 let rulePage = 1;
 let logPage = 1;
+let ruleModalSnapshot = "";
+let pendingImportedRules = null;
+let tooltipTimer = 0;
+let tooltipTarget = null;
 
 /* ================================================================
    Utility helpers
@@ -89,8 +112,20 @@ function applyTheme() {
   }
 }
 
+function updateInterceptionUi() {
+  if (elements.interceptionEnabled) {
+    elements.interceptionEnabled.checked = interceptionEnabled;
+  }
+  if (elements.interceptionStatusText) {
+    elements.interceptionStatusText.textContent = t(interceptionEnabled ? "interceptionOn" : "interceptionOff");
+    elements.interceptionStatusText.dataset.state = interceptionEnabled ? "on" : "off";
+  }
+  document.documentElement.dataset.interception = interceptionEnabled ? "on" : "off";
+}
+
 function applyLocale() {
   document.documentElement.lang = currentLocale;
+  document.title = t("managerTitle");
 
   document.querySelectorAll("[data-i18n]").forEach(function (node) {
     node.textContent = t(node.dataset.i18n);
@@ -104,12 +139,19 @@ function applyLocale() {
   document.querySelectorAll("[data-i18n-aria-label]").forEach(function (node) {
     node.setAttribute("aria-label", t(node.dataset.i18nAriaLabel));
   });
+  document.querySelectorAll("[data-i18n-tooltip]").forEach(function (node) {
+    node.dataset.tooltip = t(node.dataset.i18nTooltip);
+  });
 
   var localeSelect = document.getElementById("localeSelect");
   if (localeSelect) {
     localeSelect.value = currentLocale;
   }
 
+  if (elements.ruleModal && !elements.ruleModal.classList.contains("hidden")) {
+    elements.ruleModalTitle.textContent = t(modalMode === "create" ? "createRuleTitle" : "editRuleTitle");
+  }
+  updateInterceptionUi();
   updateUrlMatchModeUi();
   updateRewriteModeUi();
   renderRuleList();
@@ -149,12 +191,25 @@ function importRulesFromFile(file) {
       }
 
       var existingIds = new Set(rules.map(function (rule) { return rule.id; }));
+      var conflicts = imported.filter(function (rule) {
+        return existingIds.has(rule.id);
+      }).length;
       var nextRules = imported.map(function (rule) {
         return resetRuleIdentity(rule, existingIds);
       });
-      rules = nextRules.concat(rules);
-      rulePage = 1;
-      saveRules(t("importRulesSuccess", { count: nextRules.length }));
+      pendingImportedRules = {
+        rules: nextRules,
+        conflicts: conflicts
+      };
+      confirmAction = "import-rules";
+      setConfirmDialogContent(
+        "importPreviewTitle",
+        "importAppendNote",
+        "",
+        t("importPreviewMessage", { count: nextRules.length, conflicts: conflicts }),
+        "confirmImport"
+      );
+      showConfirmDialog();
     } catch (error) {
       setStatus(t("importRulesFailed", { message: error.message }), true);
     } finally {
@@ -178,14 +233,84 @@ function duplicateRule(rule) {
   var index = rules.findIndex(function (item) {
     return item.id === rule.id;
   });
+  var nextRules = rules.slice();
   if (index === -1) {
-    rules.unshift(duplicated);
+    nextRules.unshift(duplicated);
     rulePage = 1;
   } else {
-    rules.splice(index + 1, 0, duplicated);
+    nextRules.splice(index + 1, 0, duplicated);
     rulePage = Math.floor((index + 1) / RULES_PAGE_SIZE) + 1;
   }
-  saveRules(t("duplicatedRule"));
+  saveRules(t("duplicatedRule"), nextRules);
+}
+
+function moveRule(ruleId, offset) {
+  var visibleRules = getFilteredRules();
+  var visibleIndex = visibleRules.findIndex(function (rule) { return rule.id === ruleId; });
+  var targetVisibleIndex = visibleIndex + offset;
+  if (visibleIndex < 0 || targetVisibleIndex < 0 || targetVisibleIndex >= visibleRules.length) return;
+
+  var nextRules = reorderRulesByVisiblePositions(rules, visibleRules, visibleIndex, targetVisibleIndex);
+  rulePage = Math.floor(targetVisibleIndex / RULES_PAGE_SIZE) + 1;
+  saveRules(t("ruleMoved", {
+    name: visibleRules[visibleIndex].name,
+    position: targetVisibleIndex + 1
+  }), nextRules, function () {
+    focusRuleDragHandle(ruleId);
+  });
+}
+
+function focusRuleDragHandle(ruleId) {
+  var handles = elements.ruleList.querySelectorAll("[data-drag-handle]");
+  var handle = Array.from(handles).find(function (item) {
+    return item.dataset.ruleId === ruleId;
+  });
+  if (handle) handle.focus();
+}
+
+function initializeRuleSortable() {
+  if (typeof Sortable === "undefined") {
+    setStatus(t("dragUnavailable"), true);
+    return;
+  }
+
+  Sortable.create(elements.ruleList, {
+    animation: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 160,
+    easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+    draggable: ".rule-item",
+    handle: ".drag-handle",
+    ghostClass: "rule-sort-ghost",
+    chosenClass: "rule-sort-chosen",
+    dragClass: "rule-sort-dragging",
+    delay: 120,
+    delayOnTouchOnly: true,
+    touchStartThreshold: 4,
+    fallbackTolerance: 4,
+    fallbackOnBody: true,
+    onStart: function () {
+      document.body.classList.add("is-sorting");
+    },
+    onEnd: function (event) {
+      document.body.classList.remove("is-sorting");
+      if (
+        event.oldDraggableIndex == null ||
+        event.newDraggableIndex == null ||
+        event.oldDraggableIndex === event.newDraggableIndex
+      ) {
+        return;
+      }
+
+      var visibleRules = getFilteredRules();
+      var pageStart = (rulePage - 1) * RULES_PAGE_SIZE;
+      var fromIndex = pageStart + event.oldDraggableIndex;
+      var toIndex = pageStart + event.newDraggableIndex;
+      var movedRule = visibleRules[fromIndex];
+      var nextRules = reorderRulesByVisiblePositions(rules, visibleRules, fromIndex, toIndex);
+      saveRules(t("ruleOrderUpdated"), nextRules, function () {
+        if (movedRule) focusRuleDragHandle(movedRule.id);
+      }, renderRuleList);
+    }
+  });
 }
 
 /* ================================================================
@@ -198,48 +323,62 @@ function showToast(message, type) {
 
   var toast = document.createElement("div");
   toast.className = "toast " + type;
-  toast.textContent = message;
+  toast.setAttribute("role", type === "error" ? "alert" : "status");
+  var copy = document.createElement("span");
+  copy.className = "toast-copy";
+  copy.textContent = message;
+  var closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "toast-close";
+  closeButton.setAttribute("aria-label", t("dismiss"));
+  closeButton.textContent = "\u00d7";
+  toast.appendChild(copy);
+  toast.appendChild(closeButton);
   elements.toastContainer.appendChild(toast);
 
-  setTimeout(function () {
+  var removed = false;
+  function removeToast() {
+    if (removed) return;
+    removed = true;
     toast.classList.add("removing");
     toast.addEventListener("animationend", function () {
       if (toast.parentNode) toast.parentNode.removeChild(toast);
     });
-  }, 2200);
+  }
+
+  closeButton.addEventListener("click", removeToast);
+  setTimeout(removeToast, Math.min(8000, Math.max(4500, String(message).length * 90)));
 }
 
-/* ================================================================
-   Ripple effect
-   ================================================================ */
-
-function addRipple(event) {
-  var button = event.currentTarget;
-  var rect = button.getBoundingClientRect();
-  var size = Math.max(rect.width, rect.height);
-  var x = event.clientX - rect.left - size / 2;
-  var y = event.clientY - rect.top - size / 2;
-
-  var ripple = document.createElement("span");
-  ripple.className = "ripple";
-  ripple.style.width = size + "px";
-  ripple.style.height = size + "px";
-  ripple.style.left = x + "px";
-  ripple.style.top = y + "px";
-  button.appendChild(ripple);
-
-  ripple.addEventListener("animationend", function () {
-    if (ripple.parentNode) ripple.parentNode.removeChild(ripple);
-  });
+function hideTooltip() {
+  clearTimeout(tooltipTimer);
+  tooltipTimer = 0;
+  tooltipTarget = null;
+  if (elements.uiTooltip) elements.uiTooltip.hidden = true;
 }
 
-function attachRippleToButtons() {
-  document.querySelectorAll("button").forEach(function (btn) {
-    if (!btn.dataset.rippleAttached) {
-      btn.dataset.rippleAttached = "1";
-      btn.addEventListener("click", addRipple);
-    }
-  });
+function showTooltip(target, delay) {
+  if (!elements.uiTooltip || !target || !target.dataset.tooltip) return;
+  if (tooltipTarget === target && !elements.uiTooltip.hidden) return;
+
+  clearTimeout(tooltipTimer);
+  tooltipTarget = target;
+  tooltipTimer = setTimeout(function () {
+    if (tooltipTarget !== target || !target.isConnected) return;
+
+    elements.uiTooltip.textContent = target.dataset.tooltip;
+    elements.uiTooltip.hidden = false;
+
+    var targetRect = target.getBoundingClientRect();
+    var tooltipRect = elements.uiTooltip.getBoundingClientRect();
+    var left = targetRect.left + (targetRect.width - tooltipRect.width) / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - tooltipRect.width - 8));
+    var top = targetRect.top - tooltipRect.height - 7;
+    if (top < 8) top = targetRect.bottom + 7;
+
+    elements.uiTooltip.style.left = Math.round(left) + "px";
+    elements.uiTooltip.style.top = Math.round(top) + "px";
+  }, delay);
 }
 
 /* ================================================================
@@ -249,7 +388,7 @@ function attachRippleToButtons() {
 function setStatus(message, isError) {
   if (elements.status) {
     elements.status.textContent = message;
-    elements.status.style.color = isError ? "#ef4444" : "#94a3b8";
+    elements.status.classList.toggle("is-error", Boolean(isError));
   }
   if (!isError && message) {
     showToast(message, "success");
@@ -268,13 +407,77 @@ function getRuleById(ruleId) {
   }) || null;
 }
 
+function getFilteredRules() {
+  var keyword = ruleFilters.keyword.trim().toLowerCase();
+
+  return rules.filter(function (rule) {
+    if (ruleFilters.status === "enabled" && !rule.enabled) return false;
+    if (ruleFilters.status === "disabled" && rule.enabled) return false;
+    if (ruleFilters.mode && rule.rewrite.mode !== ruleFilters.mode) return false;
+    if (!keyword) return true;
+
+    return [rule.name, rule.match.method, rule.match.url].some(function (value) {
+      return String(value || "").toLowerCase().indexOf(keyword) !== -1;
+    });
+  });
+}
+
+function syncRuleFilterInputs() {
+  if (elements.ruleSearchInput) elements.ruleSearchInput.value = ruleFilters.keyword;
+  if (elements.ruleStatusFilter) elements.ruleStatusFilter.value = ruleFilters.status;
+  if (elements.ruleModeFilter) elements.ruleModeFilter.value = ruleFilters.mode;
+}
+
+function updateRuleFiltersFromInputs() {
+  ruleFilters.keyword = elements.ruleSearchInput ? elements.ruleSearchInput.value : "";
+  ruleFilters.status = elements.ruleStatusFilter ? elements.ruleStatusFilter.value : "";
+  ruleFilters.mode = elements.ruleModeFilter ? elements.ruleModeFilter.value : "";
+  rulePage = 1;
+  renderRuleList();
+}
+
+function createEmptyState(message, actionLabel, action) {
+  var empty = document.createElement("div");
+  empty.className = "empty-state";
+  var copy = document.createElement("p");
+  copy.textContent = message;
+  empty.appendChild(copy);
+  if (actionLabel && action) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "primary";
+    button.textContent = actionLabel;
+    button.addEventListener("click", action);
+    empty.appendChild(button);
+  }
+  return empty;
+}
+
+function getRuleActionIcon(action) {
+  var icons = {
+    edit: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 14.5V16h1.5L14.7 6.8l-1.5-1.5L4 14.5Z"></path><path d="m12.5 6 1.4-1.4a1 1 0 0 1 1.5 0l.1.1a1 1 0 0 1 0 1.5L14 7.5"></path></svg>',
+    duplicate: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="6" y="6" width="9" height="9" rx="1.5"></rect><path d="M4 12H3.5A1.5 1.5 0 0 1 2 10.5v-7A1.5 1.5 0 0 1 3.5 2h7A1.5 1.5 0 0 1 12 3.5V4"></path></svg>',
+    delete: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 6h12M8 3.5h4M6 6l.7 10h6.6L14 6M8.5 9v4M11.5 9v4"></path></svg>'
+  };
+  return icons[action] || "";
+}
+
+function renderRuleAction(action, ruleId, label, disabled, danger) {
+  return '<button type="button" class="table-action icon-action' + (danger ? " danger-text" : "") +
+    '" data-action="' + action + '" data-rule-id="' + ruleId + '" data-tooltip="' + escapeHtml(label) +
+    '" aria-label="' + escapeHtml(label) + '" ' + (disabled ? "disabled" : "") + '>' +
+    getRuleActionIcon(action) + '</button>';
+}
+
 /* ================================================================
    Rule list rendering (with staggered animation)
    ================================================================ */
 
 function renderRuleList() {
   elements.ruleList.innerHTML = "";
-  var paged = getPageItems(rules, rulePage, RULES_PAGE_SIZE);
+  syncRuleFilterInputs();
+  var filteredRules = getFilteredRules();
+  var paged = getPageItems(filteredRules, rulePage, RULES_PAGE_SIZE);
   rulePage = paged.page;
 
   // Update rule count in sidebar if it exists
@@ -283,45 +486,56 @@ function renderRuleList() {
   }
 
   if (!rules.length) {
-    var empty = document.createElement("div");
-    empty.className = "empty-state";
-    empty.textContent = t("emptyRules");
-    elements.ruleList.appendChild(empty);
+    elements.ruleList.appendChild(createEmptyState(t("emptyRules"), t("addFirstRule"), function () {
+      openRuleModal("create", createBlankRule());
+    }));
     renderPagination(elements.rulePageInfo, elements.rulePrevPageButton, elements.ruleNextPageButton, 1, 1, 0);
     return;
   }
 
-  paged.items.forEach(function (rule, index) {
+  if (!filteredRules.length) {
+    elements.ruleList.appendChild(createEmptyState(t("emptyFilteredRules"), t("clearFilters"), function () {
+      ruleFilters = { keyword: "", status: "", mode: "" };
+      renderRuleList();
+    }));
+    renderPagination(elements.rulePageInfo, elements.rulePrevPageButton, elements.ruleNextPageButton, 1, 1, 0);
+    return;
+  }
+
+  paged.items.forEach(function (rule) {
     var urlModeLabel = rule.match.urlMode === "contains"
       ? t("urlModeContains")
       : (rule.match.urlMode === "regex" ? t("urlModeRegex") : t("urlModeExact"));
     var hitCount = getRuleLogs(logs, rule.id).length;
+    var absoluteIndex = rules.findIndex(function (item) { return item.id === rule.id; });
+    var escapedRuleId = escapeHtml(rule.id);
+    var matchSummary = urlModeLabel + " · " + (rule.match.url || t("unset"));
     var item = document.createElement("div");
     item.className = "rule-item";
-    item.style.animationDelay = (index * 0.04) + "s";
     item.innerHTML =
-      '<span class="rule-title">' + escapeHtml(rule.name) + '</span>' +
-      '<span class="rule-meta">' + (rule.match.method || t("all")) + '</span>' +
-      '<span class="rule-meta" title="' + escapeHtml(urlModeLabel) + '">' +
-        escapeHtml(urlModeLabel + " · " + (rule.match.url || t("unset"))) +
+      '<span class="rule-title" data-label="' + escapeHtml(t("rule")) + '"><span class="rule-title-value">' +
+        '<button type="button" class="drag-handle" data-drag-handle data-rule-id="' + escapedRuleId + '" aria-describedby="ruleOrderHint ruleSortHelp" data-tooltip="' + escapeHtml(t("dragRule", { name: rule.name })) + '" aria-label="' + escapeHtml(t("dragRule", { name: rule.name })) + '">' +
+          '<svg viewBox="0 0 16 20" aria-hidden="true"><circle cx="5" cy="5" r="1.25"></circle><circle cx="11" cy="5" r="1.25"></circle><circle cx="5" cy="10" r="1.25"></circle><circle cx="11" cy="10" r="1.25"></circle><circle cx="5" cy="15" r="1.25"></circle><circle cx="11" cy="15" r="1.25"></circle></svg>' +
+        '</button>' +
+        '<span class="rule-position" aria-label="' + escapeHtml(t("rulePriority", { position: absoluteIndex + 1 })) + '">' + String(absoluteIndex + 1) + '</span><span>' + escapeHtml(rule.name) + '</span></span></span>' +
+      '<span class="rule-meta" data-label="' + escapeHtml(t("method")) + '">' + (rule.match.method || t("all")) + '</span>' +
+      '<span class="rule-meta" data-label="URL" title="' + escapeHtml(matchSummary) + '">' +
+        escapeHtml(matchSummary) +
       '</span>' +
-      '<span><span class="badge hit-badge ' + (hitCount > 0 ? "hit" : "miss") + '" data-action="view-hits" data-rule-id="' + rule.id + '">' + String(hitCount) + '</span></span>' +
-      '<span>' +
+      '<span data-label="' + escapeHtml(t("hits")) + '"><button type="button" class="badge hit-badge ' + (hitCount > 0 ? "hit" : "miss") + '" data-action="view-hits" data-rule-id="' + escapedRuleId + '" aria-label="' + escapeHtml(t("viewRuleHits", { name: rule.name, count: hitCount })) + '">' + String(hitCount) + '</button></span>' +
+      '<span data-label="' + escapeHtml(t("status")) + '">' +
         '<label class="switch list-switch">' +
-          '<input type="checkbox" ' + (rule.enabled ? "checked" : "") + ' data-action="toggle-enabled" data-rule-id="' + rule.id + '">' +
+          '<input type="checkbox" ' + (rule.enabled ? "checked" : "") + ' data-action="toggle-enabled" data-rule-id="' + escapedRuleId + '" aria-label="' + escapeHtml(t("toggleRule", { name: rule.name })) + '">' +
           '<span class="switch-slider"></span>' +
         '</label>' +
       '</span>' +
-      '<span class="row-actions">' +
-        '<button type="button" class="table-action" data-action="edit" data-rule-id="' + rule.id + '">' + t("edit") + '</button>' +
-        '<button type="button" class="table-action" data-action="duplicate" data-rule-id="' + rule.id + '">' + t("duplicate") + '</button>' +
-        '<button type="button" class="table-action danger-text" data-action="delete" data-rule-id="' + rule.id + '">' + t("delete") + '</button>' +
+      '<span class="row-actions" data-label="' + escapeHtml(t("actions")) + '">' +
+        renderRuleAction("edit", escapedRuleId, t("editRuleNamed", { name: rule.name })) +
+        renderRuleAction("duplicate", escapedRuleId, t("duplicateRuleNamed", { name: rule.name })) +
+        renderRuleAction("delete", escapedRuleId, t("deleteRuleNamedAction", { name: rule.name }), false, true) +
       '</span>';
     elements.ruleList.appendChild(item);
   });
-
-  // Attach ripple to newly created buttons
-  attachRippleToButtons();
 
   renderPagination(
     elements.rulePageInfo,
@@ -329,7 +543,7 @@ function renderRuleList() {
     elements.ruleNextPageButton,
     paged.page,
     paged.totalPages,
-    rules.length
+    filteredRules.length
   );
 }
 
@@ -402,28 +616,88 @@ function updateUrlMatchModeUi() {
    Modal management (with animation)
    ================================================================ */
 
+var modalReturnFocusMap = new WeakMap();
+var confirmParentModal = null;
+
+function getFocusableElements(modal) {
+  return Array.from(modal.querySelectorAll(
+    'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )).filter(function (node) {
+    return !node.hidden && node.offsetParent !== null;
+  });
+}
+
+function syncPageInertState() {
+  var hasOpenModal = Boolean(document.querySelector(".modal:not(.hidden)"));
+  var app = document.querySelector(".app");
+  if (app) app.inert = hasOpenModal;
+}
+
+function showModal(modal, initialFocus) {
+  if (!modal || !modal.classList.contains("hidden")) return;
+  modalReturnFocusMap.set(modal, document.activeElement);
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+  syncPageInertState();
+  setTimeout(function () {
+    var target = initialFocus || getFocusableElements(modal)[0];
+    if (target) target.focus();
+  }, 0);
+}
+
+function hideModal(modal, restoreFocus) {
+  if (!modal) return;
+  modal.classList.add("hidden");
+  modal.setAttribute("aria-hidden", "true");
+  syncPageInertState();
+  var returnFocus = modalReturnFocusMap.get(modal);
+  modalReturnFocusMap.delete(modal);
+  if (restoreFocus !== false && returnFocus) {
+    if (returnFocus.isConnected) {
+      returnFocus.focus();
+    } else if (returnFocus.dataset && returnFocus.dataset.action && returnFocus.dataset.ruleId) {
+      var replacement = Array.from(document.querySelectorAll("[data-action][data-rule-id]")).find(function (node) {
+        return node.dataset.action === returnFocus.dataset.action &&
+          node.dataset.ruleId === returnFocus.dataset.ruleId;
+      });
+      if (replacement) replacement.focus();
+      else if (elements.addRuleButton) elements.addRuleButton.focus();
+    } else if (elements.addRuleButton) {
+      elements.addRuleButton.focus();
+    }
+  }
+}
+
+function getRuleFormSnapshot() {
+  return JSON.stringify({
+    name: elements.ruleName.value,
+    enabled: elements.ruleEnabled.checked,
+    method: elements.matchMethod.value,
+    urlMode: elements.urlMatchMode.value,
+    url: elements.urlMatchValue.value,
+    rewriteMode: elements.rewriteMode.value,
+    body: elements.rewriteBody.value
+  });
+}
+
 function openRuleModal(mode, rule) {
   modalMode = mode;
   editingRuleId = rule.id;
   currentModalRule = clone(rule);
   elements.ruleModalTitle.textContent = mode === "create" ? t("createRuleTitle") : t("editRuleTitle");
+  clearFieldErrors();
   fillRuleForm(currentModalRule);
-  elements.ruleModal.classList.remove("hidden");
-  elements.ruleModal.setAttribute("aria-hidden", "false");
-  // Focus the first input
-  setTimeout(function () {
-    if (elements.ruleName) elements.ruleName.focus();
-  }, 100);
+  ruleModalSnapshot = getRuleFormSnapshot();
+  showModal(elements.ruleModal, elements.ruleName);
 }
 
 function closeRuleModal() {
   currentModalRule = null;
-  elements.ruleModal.classList.add("hidden");
-  elements.ruleModal.setAttribute("aria-hidden", "true");
+  ruleModalSnapshot = "";
+  hideModal(elements.ruleModal);
 }
 
 let confirmAction = "";
-let resetStatsReturnFocus = null;
 
 function setConfirmDialogContent(titleKey, noteKey, messageKey, message, actionKey) {
   elements.confirmModalTitle.dataset.i18n = titleKey;
@@ -438,14 +712,21 @@ function setConfirmDialogContent(titleKey, noteKey, messageKey, message, actionK
   elements.confirmModalNote.textContent = t(noteKey);
   elements.deleteModalText.textContent = message;
   elements.confirmDeleteButton.textContent = t(actionKey);
+  var isImport = actionKey === "confirmImport";
+  elements.confirmDeleteButton.classList.toggle("danger", !isImport);
+  elements.confirmDeleteButton.classList.toggle("primary", isImport);
+  elements.deleteModal.querySelector(".confirm-dialog").classList.toggle("is-neutral", isImport);
 }
 
 function showConfirmDialog() {
-  elements.deleteModal.classList.remove("hidden");
-  elements.deleteModal.setAttribute("aria-hidden", "false");
-  setTimeout(function () {
-    elements.cancelDeleteButton.focus();
-  }, 0);
+  confirmParentModal = [elements.hitsModal, elements.ruleModal, elements.logModal].find(function (modal) {
+    return modal && !modal.classList.contains("hidden") && modal !== elements.deleteModal;
+  }) || null;
+  if (confirmParentModal) {
+    confirmParentModal.setAttribute("aria-hidden", "true");
+    elements.deleteModal.classList.add("modal-confirm-above");
+  }
+  showModal(elements.deleteModal, elements.cancelDeleteButton);
 }
 
 function openDeleteModal(rule) {
@@ -476,7 +757,6 @@ function openClearLogsConfirm() {
 function openResetHitsConfirm() {
   if (!hitsModalRuleId) return;
   confirmAction = "reset-hit-stats";
-  resetStatsReturnFocus = document.activeElement;
   setConfirmDialogContent(
     "clearStats",
     "clearStatsNote",
@@ -484,17 +764,13 @@ function openResetHitsConfirm() {
     t("clearStatsConfirm"),
     "clearStats"
   );
-  // The hit records dialog stays visually behind the confirmation so cancel can
-  // return to it without rebuilding its expanded rows.
-  elements.hitsModal.setAttribute("aria-hidden", "true");
-  elements.deleteModal.classList.add("modal-confirm-above");
   showConfirmDialog();
 }
 
 function closeDeleteModal() {
-  var closedResetStatsConfirm = confirmAction === "reset-hit-stats";
   deleteRuleId = "";
   confirmAction = "";
+  pendingImportedRules = null;
   setConfirmDialogContent(
     "deleteRule",
     "deleteRuleNote",
@@ -503,68 +779,29 @@ function closeDeleteModal() {
     "confirmDelete"
   );
   elements.deleteModal.classList.remove("modal-confirm-above");
-  elements.deleteModal.classList.add("hidden");
-  elements.deleteModal.setAttribute("aria-hidden", "true");
-  if (elements.hitsModal && !elements.hitsModal.classList.contains("hidden")) {
-    elements.hitsModal.setAttribute("aria-hidden", "false");
-    if (closedResetStatsConfirm && resetStatsReturnFocus && resetStatsReturnFocus.isConnected) {
-      resetStatsReturnFocus.focus();
-    }
+  if (confirmParentModal && !confirmParentModal.classList.contains("hidden")) {
+    confirmParentModal.setAttribute("aria-hidden", "false");
   }
-  resetStatsReturnFocus = null;
+  hideModal(elements.deleteModal);
+  confirmParentModal = null;
 }
 
-/* Resizable — auto-injects handles on .modal-resizable cards */
-(function () {
-  function injectHandles(card) {
-    if (card.querySelector(".resize-handle")) return;
-    var left = document.createElement("div");
-    left.className = "resize-handle left";
-    var right = document.createElement("div");
-    right.className = "resize-handle right";
-    card.insertBefore(right, card.firstChild);
-    card.insertBefore(left, card.firstChild);
+function requestCloseRuleModal() {
+  if (getRuleFormSnapshot() === ruleModalSnapshot) {
+    closeRuleModal();
+    return;
   }
 
-  var handle = null, card = null, startX = 0, startWidth = 0, isRight = false;
-
-  function onMouseDown(e) {
-    handle = e.target.closest(".resize-handle");
-    if (!handle) return;
-    card = handle.closest(".modal-resizable");
-    if (!card) return;
-    startX = e.clientX;
-    startWidth = card.getBoundingClientRect().width;
-    isRight = handle.classList.contains("right");
-    handle.classList.add("active");
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
-    e.preventDefault();
-  }
-
-  function onMouseMove(e) {
-    if (!card || !handle) return;
-    var dx = isRight ? e.clientX - startX : startX - e.clientX;
-    var newWidth = Math.max(400, Math.min(window.innerWidth - 32, startWidth + dx));
-    card.style.width = newWidth + "px";
-  }
-
-  function onMouseUp() {
-    if (handle) handle.classList.remove("active");
-    handle = null; card = null;
-    document.removeEventListener("mousemove", onMouseMove);
-    document.removeEventListener("mouseup", onMouseUp);
-  }
-
-  document.addEventListener("mousedown", onMouseDown);
-
-  // Auto-inject handles when modals open
-  new MutationObserver(function (mutations) {
-    mutations.forEach(function (m) {
-      m.target.querySelectorAll(".modal-resizable").forEach(injectHandles);
-    });
-  }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
-})();
+  confirmAction = "discard-rule";
+  setConfirmDialogContent(
+    "discardChangesTitle",
+    "discardChangesNote",
+    "discardChangesConfirm",
+    t("discardChangesConfirm"),
+    "discardChanges"
+  );
+  showConfirmDialog();
+}
 
 var hitsModalRuleId = null;
 
@@ -581,30 +818,30 @@ function openHitsModal(rule) {
       var row = document.createElement("div");
       row.className = "hit-row";
       row.dataset.logId = l.id;
+      var detailId = "hit-detail-" + String(l.id).replace(/[^a-z0-9_-]/gi, "");
       row.innerHTML =
-        '<div class="hit-summary">' +
+        '<button type="button" class="hit-summary" aria-expanded="false" aria-controls="' + detailId + '">' +
           '<span class="hit-toggle">&#9654;</span>' +
           '<span>' + formatDate(l.matchedAt) + '</span>' +
           '<span>' + escapeHtml(l.method || "-") + '</span>' +
           '<span class="hit-url" title="' + escapeHtml(l.url) + '">' + escapeHtml(l.url || "-") + '</span>' +
           (renderLogOutcomeBadge(l) || '<span>' + escapeHtml(l.resourceType || "-") + '</span>') +
-        '</div>';
+        '</button>';
       var detail = document.createElement("div");
+      detail.id = detailId;
       detail.className = "hit-detail hidden";
-      detail.innerHTML = renderLogDetailHTML(l.originalResponse, l.rewrittenResponse, l.outcome);
+      detail.innerHTML = renderLogDetailHTML(l.originalResponse, l.rewrittenResponse, l.outcome, l);
       row.appendChild(detail);
       elements.hitsList.appendChild(row);
     });
   }
-  elements.hitsModal.classList.remove("hidden");
-  elements.hitsModal.setAttribute("aria-hidden", "false");
+  showModal(elements.hitsModal, elements.closeHitsModalButton);
 }
 
 function closeHitsModal() {
   if (!elements.hitsModal) return;
   hitsModalRuleId = null;
-  elements.hitsModal.classList.add("hidden");
-  elements.hitsModal.setAttribute("aria-hidden", "true");
+  hideModal(elements.hitsModal);
 }
 
 // Toggle hit row expand/collapse
@@ -623,9 +860,11 @@ if (elements.hitsList) {
     if (detail.classList.contains("hidden")) {
       toggle.textContent = "▶";
       row.classList.remove("expanded");
+      summary.setAttribute("aria-expanded", "false");
     } else {
       toggle.textContent = "▼";
       row.classList.add("expanded");
+      summary.setAttribute("aria-expanded", "true");
     }
   });
 }
@@ -645,11 +884,43 @@ if (elements.resetHitsStatsButton) {
    Read from form
    ================================================================ */
 
+function clearFieldErrors() {
+  [
+    ["ruleName", elements.ruleName, elements.ruleNameError],
+    ["urlMatchValue", elements.urlMatchValue, elements.urlMatchError],
+    ["rewriteBody", elements.rewriteBody, elements.rewriteBodyError]
+  ].forEach(function (entry) {
+    var input = entry[1];
+    var error = entry[2];
+    if (input) input.removeAttribute("aria-invalid");
+    if (error) {
+      error.textContent = "";
+      error.hidden = true;
+    }
+  });
+}
+
+function showFieldError(error) {
+  var input = elements[error.field];
+  var errorElement = {
+    ruleName: elements.ruleNameError,
+    urlMatchValue: elements.urlMatchError,
+    rewriteBody: elements.rewriteBodyError
+  }[error.field];
+
+  if (!input || !errorElement) return false;
+  input.setAttribute("aria-invalid", "true");
+  errorElement.textContent = error.message;
+  errorElement.hidden = false;
+  input.focus();
+  return true;
+}
+
 function readRuleFromForm(existingRule) {
   var nextRule = {
     id: existingRule.id,
     enabled: elements.ruleEnabled.checked,
-    name: elements.ruleName.value.trim() || t("unnamedRule"),
+    name: elements.ruleName.value.trim(),
     match: {
       method: elements.matchMethod.value,
       urlMode: elements.urlMatchMode ? elements.urlMatchMode.value : existingRule.match.urlMode,
@@ -671,15 +942,22 @@ function formatRewriteBody() {
 
   var raw = elements.rewriteBody.value.trim();
   if (!raw) {
-    setStatus(t("emptyResponseBody"), true);
+    var emptyError = createRuleValidationError(t("emptyResponseBody"), "rewriteBody");
+    showFieldError(emptyError);
+    setStatus(emptyError.message, true);
     return;
   }
 
   try {
     elements.rewriteBody.value = JSON.stringify(JSON.parse(raw), null, 2);
+    elements.rewriteBody.removeAttribute("aria-invalid");
+    elements.rewriteBodyError.hidden = true;
+    elements.rewriteBodyError.textContent = "";
     setStatus(t("responseBodyFormatted"));
   } catch (error) {
-    setStatus(t("invalidJson"), true);
+    var invalidError = createRuleValidationError(t("invalidJson"), "rewriteBody");
+    showFieldError(invalidError);
+    setStatus(invalidError.message, true);
   }
 }
 
@@ -687,21 +965,46 @@ function formatRewriteBody() {
    Persistence
    ================================================================ */
 
-function saveRules(message) {
-  chrome.storage.local.set({ rules: rules }, function () {
+function saveState(nextRules, nextLogs, message, onSuccess, onError) {
+  var values = { rules: nextRules };
+  if (Array.isArray(nextLogs)) values.logs = nextLogs;
+
+  chrome.storage.local.set(values, function () {
     if (chrome.runtime.lastError) {
       setStatus(t("saveFailed", { message: chrome.runtime.lastError.message }), true);
+      if (onError) onError();
       return;
     }
+    rules = nextRules;
+    if (Array.isArray(nextLogs)) logs = nextLogs;
     renderRuleList();
+    if (Array.isArray(nextLogs)) renderLogList();
     setStatus(message || t("savedRules"));
+    if (onSuccess) onSuccess();
+  });
+}
+
+function saveRules(message, nextRules, onSuccess, onError) {
+  saveState(nextRules || rules, null, message, onSuccess, onError);
+}
+
+function savePreference(values, onSuccess, onError) {
+  chrome.storage.local.set(values, function () {
+    if (chrome.runtime.lastError) {
+      setStatus(t("saveFailed", { message: chrome.runtime.lastError.message }), true);
+      if (onError) onError();
+      return;
+    }
+    if (onSuccess) onSuccess();
   });
 }
 
 function loadRules() {
-  chrome.storage.local.get({ rules: [], logs: [] }, function (result) {
+  chrome.storage.local.get({ rules: [], logs: [], [INTERCEPTION_ENABLED_KEY]: true }, function (result) {
     rules = normalizeRules(result.rules);
     logs = Array.isArray(result.logs) ? result.logs : [];
+    interceptionEnabled = result[INTERCEPTION_ENABLED_KEY] !== false;
+    updateInterceptionUi();
     renderRuleList();
     renderLogList();
     setStatus(t("loadedRules"));
@@ -712,6 +1015,29 @@ function loadRules() {
    Event listeners
    ================================================================ */
 
+document.addEventListener("pointerover", function (event) {
+  var target = event.target.closest("[data-tooltip]");
+  if (target && !target.contains(event.relatedTarget)) showTooltip(target, 40);
+});
+
+document.addEventListener("pointerout", function (event) {
+  var target = event.target.closest("[data-tooltip]");
+  if (target && !target.contains(event.relatedTarget)) hideTooltip();
+});
+
+document.addEventListener("focusin", function (event) {
+  var target = event.target.closest("[data-tooltip]");
+  if (target) showTooltip(target, 0);
+});
+
+document.addEventListener("focusout", function (event) {
+  if (event.target.closest("[data-tooltip]")) hideTooltip();
+});
+
+document.addEventListener("pointerdown", hideTooltip);
+window.addEventListener("scroll", hideTooltip, true);
+window.addEventListener("resize", hideTooltip);
+
 // Add rule
 elements.addRuleButton.addEventListener("click", function () {
   var rule = createBlankRule();
@@ -721,31 +1047,9 @@ elements.addRuleButton.addEventListener("click", function () {
 // Load example rules
 if (elements.loadExampleButton) {
   elements.loadExampleButton.addEventListener("click", function () {
-    rules = normalizeRules([
-      {
-        id: "example-1",
-        enabled: true,
-        name: "改写用户信息",
-        match: { method: "GET", url: "https://example.com/api/user/profile" },
-        rewrite: { body: '{\n  "nickname": "mocked-user",\n  "avatar": "https://example.com/avatar.png"\n}' }
-      },
-      {
-        id: "example-2",
-        enabled: true,
-        name: "Mock 订单列表",
-        match: { method: "POST", url: "https://example.com/api/orders" },
-        rewrite: { body: '{\n  "code": 0,\n  "data": { "list": [], "total": 0 }\n}' }
-      },
-      {
-        id: "example-3",
-        enabled: false,
-        name: "拦截配置接口",
-        match: { method: "GET", url: "https://example.com/api/config" },
-        rewrite: { body: '{\n  "debug": true,\n  "env": "staging"\n}' }
-      }
-    ]);
+    var exampleRules = normalizeRules(ResponseRewriterDefaults.createRules());
     rulePage = 1;
-    saveRules(t("loadedExamples"));
+    saveRules(t("loadedExamples"), exampleRules);
   });
 }
 
@@ -798,22 +1102,83 @@ if (elements.logTypeFilter) {
   });
 }
 
+if (elements.ruleSearchInput) {
+  elements.ruleSearchInput.addEventListener("input", updateRuleFiltersFromInputs);
+}
+
+if (elements.ruleStatusFilter) {
+  elements.ruleStatusFilter.addEventListener("change", updateRuleFiltersFromInputs);
+}
+
+if (elements.ruleModeFilter) {
+  elements.ruleModeFilter.addEventListener("change", updateRuleFiltersFromInputs);
+}
+
+if (elements.clearRuleFiltersButton) {
+  elements.clearRuleFiltersButton.addEventListener("click", function () {
+    ruleFilters = { keyword: "", status: "", mode: "" };
+    rulePage = 1;
+    renderRuleList();
+  });
+}
+
 if (elements.localeSelect) {
   elements.localeSelect.addEventListener("change", function () {
-    currentLocale = elements.localeSelect.value;
-    chrome.storage.local.set({ [LOCALE_STORAGE_KEY]: currentLocale }, function () {
+    var nextLocale = elements.localeSelect.value;
+    savePreference({ [LOCALE_STORAGE_KEY]: nextLocale }, function () {
+      currentLocale = nextLocale;
       applyLocale();
       setStatus(t("loadedRules"));
+    }, function () {
+      elements.localeSelect.value = currentLocale;
     });
   });
 }
 
 if (elements.themeSelect) {
   elements.themeSelect.addEventListener("change", function () {
-    currentTheme = normalizeTheme(elements.themeSelect.value);
-    chrome.storage.local.set({ [THEME_STORAGE_KEY]: currentTheme }, applyTheme);
+    var nextTheme = normalizeTheme(elements.themeSelect.value);
+    savePreference({ [THEME_STORAGE_KEY]: nextTheme }, function () {
+      currentTheme = nextTheme;
+      applyTheme();
+    }, function () {
+      elements.themeSelect.value = currentTheme;
+    });
   });
 }
+
+if (elements.interceptionEnabled) {
+  elements.interceptionEnabled.addEventListener("change", function () {
+    var nextEnabled = elements.interceptionEnabled.checked;
+    elements.interceptionEnabled.disabled = true;
+    savePreference({ [INTERCEPTION_ENABLED_KEY]: nextEnabled }, function () {
+      interceptionEnabled = nextEnabled;
+      elements.interceptionEnabled.disabled = false;
+      updateInterceptionUi();
+      setStatus(t(nextEnabled ? "interceptionEnabledMessage" : "interceptionPausedMessage"));
+    }, function () {
+      elements.interceptionEnabled.disabled = false;
+      updateInterceptionUi();
+    });
+  });
+}
+
+[elements.ruleName, elements.urlMatchValue, elements.rewriteBody].forEach(function (input) {
+  if (!input) return;
+  input.addEventListener("input", function () {
+    if (!input.hasAttribute("aria-invalid")) return;
+    input.removeAttribute("aria-invalid");
+    var describedBy = input.getAttribute("aria-describedby");
+    if (!describedBy) return;
+    describedBy.split(/\s+/).forEach(function (id) {
+      var node = document.getElementById(id);
+      if (node && node.classList.contains("field-error")) {
+        node.hidden = true;
+        node.textContent = "";
+      }
+    });
+  });
+});
 
 // Rule list delegation
 elements.ruleList.addEventListener("click", function (event) {
@@ -836,16 +1201,24 @@ elements.ruleList.addEventListener("click", function (event) {
   }
 
   if (button.dataset.action === "toggle-enabled") {
-    rules = rules.map(function (item) {
+    var toggledRules = rules.map(function (item) {
       if (item.id !== rule.id) return item;
       return Object.assign({}, item, { enabled: !item.enabled });
     });
-    saveRules(t("ruleEnabledUpdated"));
+    saveRules(t("ruleEnabledUpdated"), toggledRules);
   }
 
   if (button.dataset.action === "view-hits") {
     openHitsModal(rule);
   }
+});
+
+elements.ruleList.addEventListener("keydown", function (event) {
+  var handle = event.target.closest("[data-drag-handle]");
+  if (!handle || !event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+
+  event.preventDefault();
+  moveRule(handle.dataset.ruleId, event.key === "ArrowUp" ? -1 : 1);
 });
 
 // Log list delegation
@@ -862,7 +1235,8 @@ elements.logList.addEventListener("click", function (event) {
 });
 
 // Modal close buttons
-elements.closeRuleModalButton.addEventListener("click", closeRuleModal);
+elements.closeRuleModalButton.addEventListener("click", requestCloseRuleModal);
+if (elements.cancelRuleButton) elements.cancelRuleButton.addEventListener("click", requestCloseRuleModal);
 elements.closeDeleteModalButton.addEventListener("click", closeDeleteModal);
 elements.closeLogModalButton.addEventListener("click", closeLogModal);
 if (elements.closeHitsModalButton) elements.closeHitsModalButton.addEventListener("click", closeHitsModal);
@@ -871,104 +1245,169 @@ elements.cancelDeleteButton.addEventListener("click", closeDeleteModal);
 // Backdrop close
 document.querySelectorAll("[data-close-modal]").forEach(function (node) {
   node.addEventListener("click", function () {
-    if (node.dataset.closeModal === "rule") closeRuleModal();
+    if (node.dataset.closeModal === "rule") requestCloseRuleModal();
     if (node.dataset.closeModal === "delete") closeDeleteModal();
     if (node.dataset.closeModal === "log") closeLogModal();
     if (node.dataset.closeModal === "hits") closeHitsModal();
   });
 });
 
-// Escape key to close modals
+function getTopOpenModal() {
+  return [elements.deleteModal, elements.hitsModal, elements.logModal, elements.ruleModal].find(function (modal) {
+    return modal && !modal.classList.contains("hidden") && modal.getAttribute("aria-hidden") !== "true";
+  }) || null;
+}
+
+// Keep keyboard focus inside the topmost modal and close only that modal.
 document.addEventListener("keydown", function (event) {
+  var topModal = getTopOpenModal();
+  if (!topModal) return;
+
+  if (event.key === "Tab") {
+    var focusable = getFocusableElements(topModal);
+    if (!focusable.length) {
+      event.preventDefault();
+      return;
+    }
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+    return;
+  }
+
   if (event.key !== "Escape") return;
-  if (elements.hitsModal && !elements.hitsModal.classList.contains("hidden")) closeHitsModal();
-  else if (elements.logModal && !elements.logModal.classList.contains("hidden")) closeLogModal();
-  else if (elements.deleteModal && !elements.deleteModal.classList.contains("hidden")) closeDeleteModal();
-  else if (elements.ruleModal && !elements.ruleModal.classList.contains("hidden")) closeRuleModal();
+  event.preventDefault();
+  if (topModal === elements.deleteModal) closeDeleteModal();
+  else if (topModal === elements.hitsModal) closeHitsModal();
+  else if (topModal === elements.logModal) closeLogModal();
+  else if (topModal === elements.ruleModal) requestCloseRuleModal();
 });
 
 // Save form
 elements.ruleForm.addEventListener("submit", function (event) {
   event.preventDefault();
+  clearFieldErrors();
 
   try {
     var nextRule = readRuleFromForm(currentModalRule || createBlankRule());
+    var nextRules;
 
     if (modalMode === "create") {
-      rules.unshift(nextRule);
+      nextRules = [nextRule].concat(rules);
       rulePage = 1;
-      saveRules(t("ruleCreated"));
     } else {
-      rules = rules.map(function (rule) {
+      nextRules = rules.map(function (rule) {
         return rule.id === nextRule.id ? nextRule : rule;
       });
-      saveRules(t("ruleSaved"));
     }
 
-    closeRuleModal();
+    elements.saveButton.disabled = true;
+    saveRules(
+      t(modalMode === "create" ? "ruleCreated" : "ruleSaved"),
+      nextRules,
+      function () {
+        elements.saveButton.disabled = false;
+        ruleModalSnapshot = getRuleFormSnapshot();
+        closeRuleModal();
+      },
+      function () {
+        elements.saveButton.disabled = false;
+      }
+    );
   } catch (error) {
+    showFieldError(error);
     setStatus(error.message, true);
   }
 });
 
 // Confirm delete
 elements.confirmDeleteButton.addEventListener("click", function () {
+  var action = confirmAction;
+
+  if (action === "discard-rule") {
+    closeDeleteModal();
+    closeRuleModal();
+    return;
+  }
+
+  if (action === "import-rules" && pendingImportedRules) {
+    var importedCount = pendingImportedRules.rules.length;
+    var importedRules = pendingImportedRules.rules.concat(rules);
+    elements.confirmDeleteButton.disabled = true;
+    saveRules(
+      t("importRulesSuccess", { count: importedCount }),
+      importedRules,
+      function () {
+        elements.confirmDeleteButton.disabled = false;
+        rulePage = 1;
+        closeDeleteModal();
+      },
+      function () {
+        elements.confirmDeleteButton.disabled = false;
+      }
+    );
+    return;
+  }
+
   if (confirmAction === "reset-hit-stats") {
-    logs = logs.filter(function (log) {
+    var resetLogs = logs.filter(function (log) {
       return log.ruleId !== hitsModalRuleId;
     });
-    rules = rules.map(function (rule) {
+    var resetRules = rules.map(function (rule) {
       if (rule.id !== hitsModalRuleId) return rule;
       var updated = clone(rule);
       updated.stats = createEmptyStats();
       return updated;
     });
-    chrome.storage.local.set({ rules: rules, logs: logs }, function () {
-      renderRuleList();
-      renderLogList();
-      setStatus(t("statsCleared"));
+    elements.confirmDeleteButton.disabled = true;
+    saveState(resetRules, resetLogs, t("statsCleared"), function () {
+      elements.confirmDeleteButton.disabled = false;
+      closeDeleteModal();
+      closeHitsModal();
+    }, function () {
+      elements.confirmDeleteButton.disabled = false;
     });
-    closeHitsModal();
-    closeDeleteModal();
     return;
   }
 
   if (confirmAction === "clear-logs") {
-    logs = [];
-    rules = rules.map(function (rule) {
+    var clearedRules = rules.map(function (rule) {
       var updated = clone(rule);
       updated.stats = { hitCount: 0, lastMatchedAt: "", lastMatchedUrl: "", lastResourceType: "" };
       return updated;
     });
-    chrome.storage.local.set({ logs: [], rules: rules }, function () {
-      renderRuleList();
-      renderLogList();
-      setStatus(t("logsCleared"));
+    elements.confirmDeleteButton.disabled = true;
+    saveState(clearedRules, [], t("logsCleared"), function () {
+      elements.confirmDeleteButton.disabled = false;
+      closeDeleteModal();
+    }, function () {
+      elements.confirmDeleteButton.disabled = false;
     });
-    closeDeleteModal();
     return;
   }
 
-  rules = rules.filter(function (rule) {
+  var remainingRules = rules.filter(function (rule) {
     return rule.id !== deleteRuleId;
   });
-  logs = logs.filter(function (log) {
+  var remainingLogs = logs.filter(function (log) {
     return log.ruleId !== deleteRuleId;
   });
 
-  rulePage = Math.min(rulePage, Math.max(1, Math.ceil(rules.length / RULES_PAGE_SIZE)));
-  logPage = Math.min(logPage, Math.max(1, Math.ceil(logs.length / LOGS_PAGE_SIZE)));
-  chrome.storage.local.set({ rules: rules, logs: logs }, function () {
-    if (chrome.runtime.lastError) {
-      setStatus(t("deleteFailed", { message: chrome.runtime.lastError.message }), true);
-      return;
-    }
-
-    renderRuleList();
-    renderLogList();
-    setStatus(t("ruleDeleted"));
+  elements.confirmDeleteButton.disabled = true;
+  saveState(remainingRules, remainingLogs, t("ruleDeleted"), function () {
+    elements.confirmDeleteButton.disabled = false;
+    rulePage = Math.min(rulePage, Math.max(1, Math.ceil(remainingRules.length / RULES_PAGE_SIZE)));
+    logPage = Math.min(logPage, Math.max(1, Math.ceil(remainingLogs.length / LOGS_PAGE_SIZE)));
+    closeDeleteModal();
+  }, function () {
+    elements.confirmDeleteButton.disabled = false;
   });
-  closeDeleteModal();
 });
 
 // Pagination
@@ -1008,90 +1447,18 @@ chrome.storage.onChanged.addListener(function (changes, areaName) {
     renderRuleList();
     renderLogList();
   }
+
+  if (changes[INTERCEPTION_ENABLED_KEY]) {
+    interceptionEnabled = changes[INTERCEPTION_ENABLED_KEY].newValue !== false;
+    updateInterceptionUi();
+  }
 });
-
-// Initial ripple attachment
-attachRippleToButtons();
-
-// Monitor for dynamically added buttons (MutationObserver)
-if (window.MutationObserver) {
-  var observer = new MutationObserver(function () {
-    attachRippleToButtons();
-  });
-  observer.observe(document.body, { childList: true, subtree: true });
-}
-
-/* ================================================================
-   Info icon tooltip
-   ================================================================ */
-
-(function () {
-  var tooltip = null;
-  var activeIcon = null;
-
-  function createTooltip() {
-    tooltip = document.createElement("div");
-    tooltip.className = "tooltip";
-    document.body.appendChild(tooltip);
-  }
-
-  function showTooltip(icon) {
-    if (!tooltip) createTooltip();
-    activeIcon = icon;
-    tooltip.innerHTML = icon.dataset.tip || "";
-    tooltip.classList.add("show");
-    positionTooltip(icon);
-  }
-
-  function hideTooltip() {
-    if (!tooltip) return;
-    tooltip.classList.remove("show");
-    activeIcon = null;
-  }
-
-  function positionTooltip(icon) {
-    var rect = icon.getBoundingClientRect();
-    var tipWidth = tooltip.offsetWidth;
-    var left = rect.left - tipWidth / 2 + rect.width / 2;
-    var top = rect.bottom + 8;
-
-    // Keep within viewport
-    if (left < 8) left = 8;
-    if (left + tipWidth > window.innerWidth - 8) left = window.innerWidth - tipWidth - 8;
-
-    // Flip above if not enough room below
-    if (top + 200 > window.innerHeight) {
-      top = rect.top - 8;
-      tooltip.style.transform = "translateY(-100%)";
-    } else {
-      tooltip.style.transform = "translateY(0)";
-    }
-
-    tooltip.style.left = left + "px";
-    tooltip.style.top = top + "px";
-  }
-
-  document.addEventListener("mouseover", function (e) {
-    var icon = e.target.closest(".info-icon");
-    if (!icon) return;
-    showTooltip(icon);
-  });
-
-  document.addEventListener("mouseout", function (e) {
-    var icon = e.target.closest(".info-icon");
-    if (!icon) return;
-    hideTooltip();
-  });
-
-  document.addEventListener("scroll", function () {
-    if (!activeIcon || !tooltip) return;
-    positionTooltip(activeIcon);
-  }, true);
-})();
 
 /* ================================================================
    Bootstrap
    ================================================================ */
+
+initializeRuleSortable();
 
 chrome.storage.local.get({
   [LOCALE_STORAGE_KEY]: normalizeLocale(navigator.language),

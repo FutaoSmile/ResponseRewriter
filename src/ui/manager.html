@@ -14,6 +14,25 @@
           <p class="hint" data-i18n="appHint">按精确、包含或正则方式匹配请求 URL，并替换、合并或动态转换响应。命中次数实时记录，右侧日志可查看每一次拦截的原始与改写内容。</p>
         </div>
         <div class="header-controls">
+          <div class="header-interception">
+            <div class="header-interception-label">
+              <span id="interceptionEnabledLabel" data-i18n="interception">全局拦截</span>
+              <button type="button" class="header-help-button" aria-label="查看全局拦截说明" data-i18n-aria-label="interceptionHelp" data-tooltip="关闭后所有规则暂停生效，但不会删除规则和日志。" data-i18n-tooltip="interceptionHint">
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <circle cx="8" cy="8" r="6.25"></circle>
+                  <path d="M8 7.25v4M8 4.75h.01"></path>
+                </svg>
+              </button>
+            </div>
+            <label class="header-interception-control">
+              <strong id="interceptionStatusText" data-i18n="interceptionOn">已开启</strong>
+              <span class="switch">
+                <input id="interceptionEnabled" type="checkbox" checked aria-labelledby="interceptionEnabledLabel interceptionStatusText" aria-describedby="interceptionHint">
+                <span class="switch-slider"></span>
+              </span>
+            </label>
+            <span id="interceptionHint" class="visually-hidden" data-i18n="interceptionHint">关闭后所有规则暂停生效，但不会删除规则和日志。</span>
+          </div>
           <label class="header-select">
             <span data-i18n="theme">主题</span>
             <select id="themeSelect">
@@ -32,18 +51,42 @@
           </label>
         </div>
       </header>
+      <p class="scope-note" data-i18n="globalScopeHint">扩展会在所有 URL 和子 frame 中运行；可随时使用顶部开关暂停全部拦截。</p>
 
       <section class="manager-layout">
         <!-- Left: Rules -->
         <section class="panel manager-rules">
           <div class="panel-bar">
-            <h2 data-i18n="rulesTitle">规则列表</h2>
+            <div>
+              <h2 data-i18n="rulesTitle">规则列表</h2>
+              <p id="ruleOrderHint" class="panel-note" data-i18n="ruleOrderHint">规则从上到下执行，直接返回规则以第一条命中为准。</p>
+              <div id="ruleSortHelp" class="sort-help" role="note">
+                <span data-i18n="ruleCrossPageHint">当前页可直接拖动；跨页排序请聚焦手柄后按</span>
+                <span class="key-sequence"><kbd>Alt</kbd><span>+</span><kbd>↑</kbd><span>/</span><kbd>↓</kbd></span>
+              </div>
+            </div>
             <div class="panel-actions">
               <input id="importRulesFile" type="file" accept="application/json,.json" hidden>
               <button id="importRulesButton" type="button" data-i18n="importRules">导入</button>
               <button id="exportRulesButton" type="button" data-i18n="exportRules">导出</button>
               <button id="addRuleButton" type="button" class="primary" data-i18n="addRule">+ 新增</button>
             </div>
+          </div>
+          <div class="rule-filter-bar">
+            <input id="ruleSearchInput" type="search" placeholder="搜索名称、方法或 URL" data-i18n-placeholder="ruleSearchPlaceholder">
+            <select id="ruleStatusFilter" aria-label="状态筛选" data-i18n-aria-label="statusFilter">
+              <option value="" data-i18n="statusAll">全部状态</option>
+              <option value="enabled" data-i18n="enabledOnly">仅启用</option>
+              <option value="disabled" data-i18n="disabledOnly">仅停用</option>
+            </select>
+            <select id="ruleModeFilter" aria-label="响应方式筛选" data-i18n-aria-label="modeFilter">
+              <option value="" data-i18n="modeAll">全部方式</option>
+              <option value="replace" data-i18n="rewriteModeReplace">完整替换</option>
+              <option value="json-merge" data-i18n="rewriteModeJsonMerge">JSON 局部合并</option>
+              <option value="script" data-i18n="rewriteModeScript">JavaScript 转换</option>
+              <option value="mock-fetch" data-i18n="rewriteModeMockFetch">拦截 Fetch，直接返回</option>
+            </select>
+            <button id="clearRuleFiltersButton" type="button" data-i18n="clearFilters">清除筛选</button>
           </div>
           <div class="list-head">
             <span data-i18n="rule">规则</span>
@@ -63,9 +106,12 @@
 
         <!-- Right: Logs -->
         <section class="panel manager-logs">
-          <div class="panel-bar">
-            <h2 data-i18n="logsTitle">拦截日志</h2>
-            <button id="clearLogsButton" type="button" class="danger" style="display:none;" data-i18n="clear">清空</button>
+          <div class="panel-bar manager-log-header">
+            <div>
+              <h2 data-i18n="logsTitle">拦截日志</h2>
+              <p class="panel-note" data-i18n="logRetentionHint">仅保留最近 100 条，单个响应最多显示 20000 个字符。</p>
+            </div>
+            <button id="clearLogsButton" type="button" class="danger" hidden data-i18n="clearLogsTitle">清空日志</button>
           </div>
           <div class="log-filter-bar">
             <input id="logSearchInput" type="search" placeholder="搜索规则、方法或 URL" data-i18n-placeholder="logSearchPlaceholder">
@@ -90,17 +136,17 @@
         </section>
       </section>
 
-      <div id="status"></div>
+      <div id="status" role="status" aria-live="polite"></div>
     </main>
 
     <!-- Rule Edit Modal -->
     <div id="ruleModal" class="modal hidden" aria-hidden="true">
-      <div class="modal-backdrop"></div>
-      <section class="modal-card modal-resizable">
+      <div class="modal-backdrop" data-close-modal="rule"></div>
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ruleModalTitle" aria-describedby="ruleModalNote">
         <div class="modal-header">
           <div>
             <h2 id="ruleModalTitle">新增规则</h2>
-            <p class="panel-note" data-i18n="ruleModalNote">选择 URL 匹配方式和响应处理方式。</p>
+            <p id="ruleModalNote" class="panel-note" data-i18n="ruleModalNote">选择 URL 匹配方式和响应处理方式。</p>
           </div>
           <button id="closeRuleModalButton" type="button" class="icon-button" aria-label="关闭" data-i18n-aria-label="close">&times;</button>
         </div>
@@ -109,7 +155,8 @@
           <div class="rule-form-row rule-form-row-3">
             <label class="field field-name">
               <span data-i18n="ruleName">规则名称</span>
-              <input id="ruleName" name="ruleName" type="text" maxlength="60" placeholder="例如：改写用户信息" data-i18n-placeholder="ruleNamePlaceholder">
+              <input id="ruleName" name="ruleName" type="text" maxlength="60" placeholder="例如：改写用户信息" data-i18n-placeholder="ruleNamePlaceholder" aria-required="true" aria-describedby="ruleNameError">
+              <small id="ruleNameError" class="field-error" hidden></small>
             </label>
             <label class="field field-method">
               <span data-i18n="requestMethod">请求方法</span>
@@ -144,7 +191,8 @@
             </label>
             <label class="field">
               <span data-i18n="urlMatch">URL 匹配值</span>
-              <input id="urlMatchValue" type="text" placeholder="https://example.com/api/user/profile" data-i18n-placeholder="urlMatchPlaceholder">
+              <input id="urlMatchValue" type="text" placeholder="https://example.com/api/user/profile" data-i18n-placeholder="urlMatchPlaceholder" aria-required="true" aria-describedby="urlMatchError">
+              <small id="urlMatchError" class="field-error" hidden></small>
             </label>
           </div>
           <div class="field-guidance" aria-live="polite">
@@ -154,11 +202,10 @@
               <code id="urlMatchModeExample"></code>
             </div>
           </div>
-
           <label class="field field-response-mode">
             <span data-i18n="rewriteMode">响应处理方式</span>
             <select id="rewriteMode">
-              <option value="replace" data-i18n="rewriteModeReplace">整段替换</option>
+              <option value="replace" data-i18n="rewriteModeReplace">完整替换</option>
               <option value="json-merge" data-i18n="rewriteModeJsonMerge">JSON 局部合并</option>
               <option value="script" data-i18n="rewriteModeScript">JavaScript 转换</option>
               <option value="mock-fetch" data-i18n="rewriteModeMockFetch">拦截 Fetch，直接返回</option>
@@ -175,12 +222,14 @@
           <label class="field">
             <span id="responseBodyLabel" data-i18n="responseBody">返回内容</span>
             <div class="textarea-action-wrap">
-              <textarea id="rewriteBody" placeholder="输入命中后直接返回的 JSON 响应内容" spellcheck="false" data-i18n-placeholder="responseBodyPlaceholder"></textarea>
+              <textarea id="rewriteBody" placeholder="输入命中后直接返回的 JSON 响应内容" spellcheck="false" data-i18n-placeholder="responseBodyPlaceholder" aria-describedby="rewriteBodyError"></textarea>
               <button id="formatRewriteBodyButton" type="button" class="textarea-action-button" data-i18n="format">格式化</button>
             </div>
+            <small id="rewriteBodyError" class="field-error" hidden></small>
           </label>
 
           <div class="form-actions">
+            <button id="cancelRuleButton" type="button" data-i18n="cancel">取消</button>
             <button id="saveButton" type="submit" class="primary" data-i18n="save">保存</button>
           </div>
         </form>
@@ -190,7 +239,7 @@
     <!-- Delete Confirm Modal -->
     <div id="deleteModal" class="modal hidden" aria-hidden="true">
       <div class="modal-backdrop" data-close-modal="delete"></div>
-      <section class="modal-card modal-card-small modal-resizable confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmModalTitle" aria-describedby="deleteModalText confirmModalNote">
+      <section class="modal-card modal-card-small confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmModalTitle" aria-describedby="deleteModalText confirmModalNote">
         <div class="modal-header">
           <h2 id="confirmModalTitle" data-i18n="deleteRule">删除规则</h2>
           <button id="closeDeleteModalButton" type="button" class="icon-button" aria-label="关闭" data-i18n-aria-label="close">&times;</button>
@@ -214,10 +263,10 @@
     <!-- Log Detail Modal -->
     <div id="logModal" class="modal hidden" aria-hidden="true">
       <div class="modal-backdrop" data-close-modal="log"></div>
-      <section class="modal-card log-detail-modal modal-resizable">
+      <section class="modal-card log-detail-modal" role="dialog" aria-modal="true" aria-labelledby="logModalTitle">
         <div class="modal-header">
           <div>
-            <h2 data-i18n="logDetail">拦截详情</h2>
+            <h2 id="logModalTitle" data-i18n="logDetail">拦截详情</h2>
             <div class="log-meta-bar" id="logMetaBar"></div>
           </div>
           <button id="closeLogModalButton" type="button" class="icon-button" aria-label="关闭" data-i18n-aria-label="close">&times;</button>
@@ -228,13 +277,13 @@
     <!-- Hits Modal -->
     <div id="hitsModal" class="modal hidden" aria-hidden="true">
       <div class="modal-backdrop" data-close-modal="hits"></div>
-      <section class="modal-card hits-modal modal-resizable">
+      <section class="modal-card hits-modal" role="dialog" aria-modal="true" aria-labelledby="hitsModalTitle">
         <div class="modal-header">
           <div>
             <h2 id="hitsModalTitle" data-i18n="hitRecords">命中记录</h2>
           </div>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <button id="resetHitsStatsButton" type="button" class="danger" style="padding:6px 12px;font-size:12px;" data-i18n="clearStats">清空记录</button>
+          <div class="modal-header-actions">
+            <button id="resetHitsStatsButton" type="button" class="danger compact-button" data-i18n="clearStats">清空记录</button>
             <button id="closeHitsModalButton" type="button" class="icon-button" aria-label="关闭" data-i18n-aria-label="close">&times;</button>
           </div>
         </div>
@@ -242,11 +291,14 @@
       </section>
     </div>
 
-    <div class="toast-container" id="toastContainer"></div>
+    <div id="uiTooltip" class="ui-tooltip" role="tooltip" hidden></div>
+    <div class="toast-container" id="toastContainer" aria-live="polite" aria-atomic="true"></div>
 
+    <script src="../default-data.js"></script>
     <script src="i18n.js"></script>
     <script src="rule-model.js"></script>
     <script src="log-view.js"></script>
+    <script src="vendor/sortable.min.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

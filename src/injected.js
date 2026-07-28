@@ -22,6 +22,7 @@
     }
   };
   let activeRules = [];
+  let interceptionEnabled = true;
   let rulesReady = false;
   const rulesReadyCallbacks = [];
   const RULES_READY_TIMEOUT = 500;
@@ -138,7 +139,7 @@
   }
 
   function ruleApplies(rule, context) {
-    if (!rule || rule.enabled === false) {
+    if (!interceptionEnabled || !rule || rule.enabled === false) {
       return false;
     }
 
@@ -200,7 +201,7 @@
     const originalText = context.responseText;
 
     if (typeof body !== "string") {
-      return originalText;
+      return { text: originalText, error: "Response body is not text." };
     }
 
     try {
@@ -208,9 +209,9 @@
         const original = JSON.parse(originalText);
         const patch = JSON.parse(body);
         if (!isPlainObject(original) || !isPlainObject(patch)) {
-          return originalText;
+          throw new Error("JSON merge requires object responses and object rule content.");
         }
-        return JSON.stringify(mergeJsonObject(original, patch));
+        return { text: JSON.stringify(mergeJsonObject(original, patch)), error: "" };
       }
 
       if (mode === "script") {
@@ -218,22 +219,25 @@
         // Page CSP may reject dynamic evaluation, so the surrounding catch preserves
         // the original response instead of failing the request.
         const transform = new Function("originalResponse", "context", body);
-        return toResponseText(transform(originalText, {
+        return { text: toResponseText(transform(originalText, {
           method: context.method,
           url: context.url,
           resourceType: context.resourceType
-        }), originalText);
+        }), originalText), error: "" };
       }
     } catch (error) {
       console.error("ResponseRewriter transform failed:", error);
-      return originalText;
+      return {
+        text: originalText,
+        error: error && error.message ? String(error.message) : "Response transform failed."
+      };
     }
 
-    return body;
+    return { text: body, error: "" };
   }
 
   function hasMatchableRules() {
-    return activeRules.some(function (rule) {
+    return interceptionEnabled && activeRules.some(function (rule) {
       return rule && rule.enabled !== false && rule.match && rule.match.url;
     });
   }
@@ -264,6 +268,7 @@
   function rewriteText(context) {
     let currentText = context.responseText;
     const matchedRules = [];
+    const steps = [];
 
     // Matching rules run in list order and each rule receives the previous rule's
     // output. This makes multiple enabled rules an explicit transformation pipeline.
@@ -274,10 +279,17 @@
       }
 
       matchedRules.push(rule);
-      currentText = applyRewrite(rule, nextContext);
+      const applied = applyRewrite(rule, nextContext);
+      steps.push({
+        rule: rule,
+        originalResponse: currentText,
+        rewrittenResponse: applied.text,
+        error: applied.error
+      });
+      currentText = applied.text;
     }
 
-    return { text: currentText, matchedRules };
+    return { text: currentText, matchedRules, steps };
   }
 
   function getToastMount() {
@@ -410,7 +422,9 @@
   }
 
   function emitRuleHit(rule, context) {
-    if (context.outcome !== "xhr-passthrough") {
+    if (context.outcome !== "xhr-passthrough" &&
+        context.outcome !== "rewrite-failed" &&
+        context.outcome !== "unchanged") {
       showRewriteToast(rule, context);
     }
 
@@ -425,6 +439,7 @@
         method: context.method,
         resourceType: context.resourceType,
         outcome: context.outcome || "rewritten",
+        errorMessage: context.errorMessage || "",
         originalResponse: context.originalResponse,
         rewrittenResponse: context.rewrittenResponse
       },
@@ -499,19 +514,23 @@
             responseText: xhr.responseText
           });
 
-          if (result.text === xhr.responseText) {
-            return;
-          }
-
-          result.matchedRules.forEach(function (rule) {
-            emitRuleHit(rule, {
+          result.steps.forEach(function (step) {
+            emitRuleHit(step.rule, {
               resourceType: "xhr",
               method: xhr.__interceptor.method,
               url: url,
-              originalResponse: xhr.responseText,
-              rewrittenResponse: result.text
+              outcome: step.error
+                ? "rewrite-failed"
+                : (step.originalResponse === step.rewrittenResponse ? "unchanged" : "rewritten"),
+              errorMessage: step.error,
+              originalResponse: step.originalResponse,
+              rewrittenResponse: step.rewrittenResponse
             });
           });
+
+          if (result.text === xhr.responseText) {
+            return;
+          }
 
           // response/responseText are read-only prototype accessors. Defining own
           // properties shadows them for page code after readyState reaches DONE.
@@ -606,19 +625,23 @@
             responseText: originalText
           });
 
-          if (result.text === originalText) {
-            return response;
-          }
-
-          result.matchedRules.forEach(function (rule) {
-            emitRuleHit(rule, {
+          result.steps.forEach(function (step) {
+            emitRuleHit(step.rule, {
               resourceType: "fetch",
               method: requestContext.method,
               url: response.url || requestContext.url,
-              originalResponse: originalText,
-              rewrittenResponse: result.text
+              outcome: step.error
+                ? "rewrite-failed"
+                : (step.originalResponse === step.rewrittenResponse ? "unchanged" : "rewritten"),
+              errorMessage: step.error,
+              originalResponse: step.originalResponse,
+              rewrittenResponse: step.rewrittenResponse
             });
           });
+
+          if (result.text === originalText) {
+            return response;
+          }
 
           const headers = new Headers(response.headers);
           // The rewritten UTF-8 byte length can differ from the server header.
@@ -644,6 +667,7 @@
 
     if (event.data.type === "SET_RULES") {
       activeRules = Array.isArray(event.data.rules) ? event.data.rules : [];
+      interceptionEnabled = event.data.interceptionEnabled !== false;
       markRulesReady();
     }
   });
