@@ -1,5 +1,8 @@
 importScripts("default-data.js");
 
+const PRIVACY_CONSENT_KEY = "privacyConsentVersion";
+const REQUIRED_PRIVACY_CONSENT_VERSION = 1;
+
 function normalizeRules(rules) {
   return Array.isArray(rules) ? rules : [];
 }
@@ -32,8 +35,16 @@ function updateBadgeFromRules(rules, interceptionEnabled) {
 }
 
 function refreshBadge() {
-  chrome.storage.local.get({ rules: [], interceptionEnabled: true }, function (result) {
-    updateBadgeFromRules(result.rules, result.interceptionEnabled);
+  chrome.storage.local.get({
+    rules: [],
+    interceptionEnabled: true,
+    [PRIVACY_CONSENT_KEY]: 0
+  }, function (result) {
+    updateBadgeFromRules(
+      result.rules,
+      result[PRIVACY_CONSENT_KEY] === REQUIRED_PRIVACY_CONSENT_VERSION &&
+        result.interceptionEnabled !== false
+    );
   });
 }
 
@@ -45,13 +56,20 @@ function handleInstalled(details) {
 
   // Installation defaults are only written for missing keys. This keeps unpacked
   // reloads and unusual restored profiles from losing data that already exists.
-  chrome.storage.local.get({ rules: null, logs: null }, function (result) {
+  chrome.storage.local.get({
+    rules: null,
+    logs: null,
+    [PRIVACY_CONSENT_KEY]: null
+  }, function (result) {
     var defaults = {};
     if (!Array.isArray(result.rules)) {
       defaults.rules = ResponseRewriterDefaults.createRules();
     }
     if (!Array.isArray(result.logs)) {
       defaults.logs = ResponseRewriterDefaults.createLogs();
+    }
+    if (result[PRIVACY_CONSENT_KEY] === null) {
+      defaults[PRIVACY_CONSENT_KEY] = 0;
     }
 
     if (!Object.keys(defaults).length) {
@@ -83,7 +101,8 @@ chrome.runtime.onInstalled.addListener(handleInstalled);
 chrome.runtime.onStartup.addListener(refreshBadge);
 
 chrome.storage.onChanged.addListener(function (changes, areaName) {
-  if (areaName !== "local" || (!changes.rules && !changes.interceptionEnabled)) {
+  if (areaName !== "local" ||
+      (!changes.rules && !changes.interceptionEnabled && !changes[PRIVACY_CONSENT_KEY])) {
     return;
   }
 

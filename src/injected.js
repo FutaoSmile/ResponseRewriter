@@ -1,8 +1,15 @@
 (function () {
   // This file executes in the page world, not the extension's isolated content-script
-  // world. Keep extension API access in content.js and communicate through postMessage.
-  const EXTENSION_SOURCE = "response-rewriter-extension";
-  const PAGE_SOURCE = "response-rewriter-page";
+  // world. A random per-frame event name keeps rule snapshots off public message
+  // broadcasts and prevents ordinary page scripts from forging extension events.
+  const channelId = crypto.randomUUID();
+  const BOOTSTRAP_REQUEST_EVENT = "response-rewriter:bootstrap-request";
+  const BOOTSTRAP_RESPONSE_EVENT = "response-rewriter:bootstrap-response";
+  const RULES_EVENT = "response-rewriter:" + channelId + ":rules";
+  const HIT_EVENT = "response-rewriter:" + channelId + ":hit";
+  const OPEN_MANAGER_EVENT = "response-rewriter:" + channelId + ":open-manager";
+  const dispatchWindowEvent = window.dispatchEvent.bind(window);
+  const PageCustomEvent = window.CustomEvent;
   const TOAST_I18N = {
     "zh-CN": {
       open: "打开 ResponseRewriter",
@@ -23,9 +30,16 @@
   };
   let activeRules = [];
   let interceptionEnabled = true;
+  let interceptorPatched = false;
   let rulesReady = false;
   const rulesReadyCallbacks = [];
   const RULES_READY_TIMEOUT = 500;
+
+  window.addEventListener(BOOTSTRAP_REQUEST_EVENT, function () {
+    dispatchWindowEvent(new PageCustomEvent(BOOTSTRAP_RESPONSE_EVENT, {
+      detail: channelId
+    }));
+  }, { once: true });
 
   function markRulesReady() {
     rulesReady = true;
@@ -297,13 +311,7 @@
   }
 
   function openManager() {
-    window.postMessage(
-      {
-        source: PAGE_SOURCE,
-        type: "OPEN_MANAGER"
-      },
-      "*"
-    );
+    dispatchWindowEvent(new PageCustomEvent(OPEN_MANAGER_EVENT));
   }
 
   function getToastContainer(mount) {
@@ -428,10 +436,8 @@
       showRewriteToast(rule, context);
     }
 
-    window.postMessage(
-      {
-        source: PAGE_SOURCE,
-        type: "RULE_HIT",
+    dispatchWindowEvent(new PageCustomEvent(HIT_EVENT, {
+      detail: JSON.stringify({
         ruleId: rule.id,
         ruleName: rule.name || "",
         matchedAt: new Date().toISOString(),
@@ -442,9 +448,8 @@
         errorMessage: context.errorMessage || "",
         originalResponse: context.originalResponse,
         rewrittenResponse: context.rewrittenResponse
-      },
-      "*"
-    );
+      })
+    }));
   }
 
   function patchXhr() {
@@ -658,28 +663,22 @@
     };
   }
 
-  window.addEventListener("message", function (event) {
-    // Only accept rule snapshots sent by our isolated-world bridge; arbitrary page
-    // messages must not be able to replace the active rule set.
-    if (event.source !== window || !event.data || event.data.source !== EXTENSION_SOURCE) {
-      return;
-    }
-
-    if (event.data.type === "SET_RULES") {
-      activeRules = Array.isArray(event.data.rules) ? event.data.rules : [];
-      interceptionEnabled = event.data.interceptionEnabled !== false;
+  window.addEventListener(RULES_EVENT, function (event) {
+    try {
+      var snapshot = JSON.parse(event.detail || "{}");
+      activeRules = Array.isArray(snapshot.rules) ? snapshot.rules : [];
+      interceptionEnabled = snapshot.interceptionEnabled !== false;
+      if (snapshot.privacyConsentGranted === true && !interceptorPatched) {
+        patchXhr();
+        patchFetch();
+        interceptorPatched = true;
+      }
+      markRulesReady();
+    } catch (error) {
+      activeRules = [];
+      interceptionEnabled = false;
       markRulesReady();
     }
   });
 
-  patchXhr();
-  patchFetch();
-
-  window.postMessage(
-    {
-      source: PAGE_SOURCE,
-      type: "REQUEST_RULES"
-    },
-    "*"
-  );
 })();

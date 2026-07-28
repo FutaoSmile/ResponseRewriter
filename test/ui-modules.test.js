@@ -88,13 +88,22 @@ test("new management and accessibility copy is localized in every supported lang
   const keys = [
     "managerTitle",
     "exampleLog",
-    "interceptionHelp",
     "interceptionOn",
     "interceptionOff",
+    "interceptionConsentRequired",
     "interceptionHint",
     "globalScopeHint",
+    "privacyConsentTitle",
+    "privacyConsentSummary",
+    "privacyConsentData",
+    "privacyConsentStorage",
+    "privacyConsentSharing",
+    "privacyPolicyLink",
+    "privacyConsentLater",
+    "privacyConsentAccept",
+    "privacyConsentAccepted",
+    "privacyConsentDeferred",
     "ruleOrderHint",
-    "ruleCrossPageHint",
     "ruleSearchPlaceholder",
     "clearFilters",
     "dragRule",
@@ -253,7 +262,7 @@ test("manager list controls use compact sizing without shrinking their labels", 
 
   assert.doesNotMatch(managerSource, /clearLogsButton[^>]*font-size:/);
   assert.match(styles, /--compact-control-height:\s*34px;/);
-  assert.match(styles, /\.header-select select\s*\{[^{}]*min-height:\s*var\(--compact-control-height\);/);
+  assert.match(styles, /\.header-icon-link\s*\{[^{}]*width:\s*32px;[^{}]*height:\s*32px;/);
   assert.match(styles, /\.app-manager \.log-filter-bar input,[\s\S]*?min-height:\s*var\(--compact-control-height\);/);
   assert.match(styles, /\.app-manager \.panel-actions button,[\s\S]*?min-height:\s*32px;/);
 });
@@ -288,6 +297,7 @@ test("manager exposes rule ordering, filters, and global pause without site scop
   const managerSource = fs.readFileSync(path.join(uiDirectory, "manager.html"), "utf8");
   const popupSource = fs.readFileSync(path.join(uiDirectory, "popup.js"), "utf8");
   const ruleModelSource = fs.readFileSync(path.join(uiDirectory, "rule-model.js"), "utf8");
+  const styles = fs.readFileSync(path.join(uiDirectory, "popup.css"), "utf8");
 
   [
     "interceptionEnabled",
@@ -299,7 +309,15 @@ test("manager exposes rule ordering, filters, and global pause without site scop
     assert.match(managerSource, new RegExp('id="' + id + '"'));
   });
   assert.match(managerSource, /\.\.\/default-data\.js[\s\S]*i18n\.js[\s\S]*vendor\/sortable\.min\.js[\s\S]*popup\.js/);
-  assert.match(managerSource, /id="ruleSortHelp"[\s\S]*<kbd>Alt<\/kbd>[\s\S]*<kbd>↑<\/kbd>[\s\S]*<kbd>↓<\/kbd>/);
+  assert.match(managerSource, /class="panel-title-line"[\s\S]*data-i18n="rulesTitle"[\s\S]*id="ruleOrderHint"/);
+  assert.match(managerSource, /class="panel-info-button"[^>]*data-i18n-tooltip="ruleOrderHint"[^>]*data-tooltip-nowrap/);
+  assert.match(managerSource, /id="ruleOrderHint" class="visually-hidden"[^>]*data-i18n="ruleOrderHint"/);
+  assert.doesNotMatch(managerSource, /<p id="ruleOrderHint"/);
+  assert.match(styles, /\.panel-info-button\s*\{[^{}]*width:\s*22px;[^{}]*height:\s*22px;/);
+  assert.match(styles, /\.ui-tooltip\.is-nowrap\s*\{[^{}]*white-space:\s*nowrap;/);
+  assert.match(popupSource, /classList\.toggle\("is-nowrap", target\.hasAttribute\("data-tooltip-nowrap"\)\)/);
+  assert.doesNotMatch(managerSource, /id="ruleSortHelp"|data-i18n="ruleCrossPageHint"/);
+  assert.match(popupSource, /aria-describedby="ruleOrderHint"/);
   assert.match(popupSource, /Sortable\.create\(elements\.ruleList/);
   assert.match(popupSource, /class="drag-handle" data-drag-handle/);
   assert.match(popupSource, /event\.altKey[\s\S]*"ArrowUp"[\s\S]*"ArrowDown"/);
@@ -368,7 +386,7 @@ test("all modals expose dialog semantics and the topmost modal owns Escape", fun
   const managerSource = fs.readFileSync(path.join(uiDirectory, "manager.html"), "utf8");
   const popupSource = fs.readFileSync(path.join(uiDirectory, "popup.js"), "utf8");
 
-  assert.equal((managerSource.match(/role="dialog" aria-modal="true"/g) || []).length, 3);
+  assert.equal((managerSource.match(/role="dialog" aria-modal="true"/g) || []).length, 4);
   assert.equal((managerSource.match(/role="alertdialog" aria-modal="true"/g) || []).length, 1);
   assert.match(popupSource, /function getTopOpenModal\(\)/);
   assert.match(popupSource, /if \(topModal === elements\.deleteModal\) closeDeleteModal\(\)/);
@@ -400,6 +418,10 @@ test("responsive rules preserve labels and mobile targets", function () {
   assert.match(styles, /\.manager-rules \.rule-item > span::before\s*\{[^{}]*content:\s*attr\(data-label\)/);
   assert.match(styles, /@media \(max-width: 640px\)[\s\S]*min-height:\s*44px/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.match(styles, /scrollbar-width:\s*thin;/);
+  assert.match(styles, /\*::\-webkit-scrollbar\s*\{[^{}]*width:\s*8px;[^{}]*height:\s*8px;/);
+  assert.equal((styles.match(/\{/g) || []).length, (styles.match(/\}/g) || []).length);
+  assert.match(styles, /\.header-divider\s*\{\s*display:\s*none;\s*\}\s*\.list-head,/);
 });
 
 test("manager workspace gives the rule list more room on wide screens", function () {
@@ -446,19 +468,55 @@ test("light-theme muted and semantic text tokens meet WCAG AA contrast", functio
   assert.ok(contrastRatio(token("danger-text"), token("danger-50")) >= 4.5);
 });
 
-test("global interception control explains its impact without changing header density", function () {
+test("header appearance controls expose compact icons, a language menu, and clear global state", function () {
   const managerSource = fs.readFileSync(path.join(uiDirectory, "manager.html"), "utf8");
   const styles = fs.readFileSync(path.join(uiDirectory, "popup.css"), "utf8");
   const popupSource = fs.readFileSync(path.join(uiDirectory, "popup.js"), "utf8");
 
-  assert.match(managerSource, /class="header-help-button"[^>]*data-i18n-tooltip="globalScopeHint"/);
+  assert.match(managerSource, /id="themeToggleButton"[\s\S]*class="icon-sun"[\s\S]*class="icon-moon"/);
+  assert.match(styles, /html\[data-theme="dark"\] \.header-icon-link \.icon-moon\s*\{\s*display:\s*block;/);
+  assert.match(styles, /html:not\(\[data-theme="dark"\]\) \.header-icon-link \.icon-sun\s*\{\s*display:\s*block;/);
+  assert.match(popupSource, /currentTheme === "dark" \? "themeDark" : "themeLight"/);
+  assert.match(managerSource, /id="localeMenuButton"[^>]*popovertarget="localeMenu"[^>]*aria-haspopup="menu"/);
+  assert.match(managerSource, /id="localeMenu"[^>]*popover[^>]*role="menu"/);
+  assert.equal((managerSource.match(/class="locale-option"/g) || []).length, 4);
+  assert.match(styles, /\.header-icon-link\s*\{[^{}]*border:\s*0;[^{}]*background:\s*transparent;/);
+  assert.match(styles, /\.locale-menu\s*\{[^{}]*position:\s*fixed;/);
+  assert.match(popupSource, /localeMenu\.addEventListener\("beforetoggle"/);
+  assert.match(popupSource, /localeMenuButton\.setAttribute\("aria-expanded"/);
+  assert.match(managerSource, /class="header-icon-link header-interception-control"[^>]*data-i18n-tooltip="globalScopeHint"[^>]*data-tooltip-two-lines/);
   assert.match(managerSource, /id="interceptionHint" class="visually-hidden"[^>]*data-i18n="interceptionHint"/);
   assert.match(managerSource, /id="interceptionEnabled"[^>]*aria-describedby="interceptionHint"/);
-  assert.match(styles, /\.header-interception-control\s*\{[^{}]*min-height:\s*var\(--compact-control-height\);[^{}]*border-radius:\s*var\(--radius-sm\);/);
-  assert.doesNotMatch(styles, /\.header-interception\s*\{[^{}]*min-height:\s*58px;/);
-  assert.doesNotMatch(styles, /\.header-interception\s*\{[^{}]*background:/);
+  assert.doesNotMatch(managerSource, /header-interception-copy|header-interception-switch|header-help-button/);
+  assert.match(styles, /\.header-interception-control\s*\{[^{}]*position:\s*relative;[^{}]*color:\s*#34d399;/);
+  assert.match(styles, /html\[data-interception="off"\] \.header-interception-control\s*\{[^{}]*color:\s*#cbd5e1;/);
+  assert.match(styles, /\.ui-tooltip\.is-two-lines\s*\{[^{}]*white-space:\s*pre;/);
+  assert.match(popupSource, /classList\.toggle\("is-two-lines", target\.hasAttribute\("data-tooltip-two-lines"\)\)/);
+  assert.match(popupSource, /"\\n" \+ t\("globalScopeHint"\)/);
+  assert.match(popupSource, /elements\.interceptionControl\.dataset\.tooltip[\s\S]*t\("globalScopeHint"\)/);
   assert.match(popupSource, /querySelectorAll\("\[data-i18n-tooltip\]"\)[\s\S]*node\.dataset\.tooltip = t/);
   assert.ok(contrastRatio("#ffffff", "#4338ca") >= 4.5);
+});
+
+test("privacy consent is explicit, localized, and required before interception", function () {
+  const managerSource = fs.readFileSync(path.join(uiDirectory, "manager.html"), "utf8");
+  const popupSource = fs.readFileSync(path.join(uiDirectory, "popup.js"), "utf8");
+  const contentSource = fs.readFileSync(path.join(__dirname, "..", "src", "content.js"), "utf8");
+  const manifestSource = fs.readFileSync(path.join(__dirname, "..", "manifest.json"), "utf8");
+  const privacyPolicy = fs.readFileSync(path.join(__dirname, "..", "PRIVACY.md"), "utf8");
+
+  assert.match(managerSource, /id="privacyConsentModal"[\s\S]*aria-labelledby="privacyConsentTitle"/);
+  assert.match(managerSource, /id="privacyConsentLaterButton"[\s\S]*id="privacyConsentAcceptButton"/);
+  assert.match(managerSource, /PRIVACY\.md/);
+  assert.match(popupSource, /PRIVACY_CONSENT_KEY[\s\S]*REQUIRED_PRIVACY_CONSENT_VERSION/);
+  assert.match(popupSource, /function acceptPrivacyConsent\(\)[\s\S]*PRIVACY_CONSENT_KEY/);
+  assert.match(contentSource, /PRIVACY_CONSENT_KEY[\s\S]*sendRulesToPage\(\[\], false, false\)/);
+  assert.match(manifestSource, /"src\/injected\.js"[\s\S]*"world": "MAIN"[\s\S]*"src\/content\.js"/);
+  assert.doesNotMatch(manifestSource, /web_accessible_resources/);
+  assert.match(privacyPolicy, /chrome\.storage\.local/);
+  assert.match(privacyPolicy, /100/);
+  assert.match(privacyPolicy, /20,000/);
+  assert.match(privacyPolicy, /Limited Use/);
 });
 
 test("rule model keeps backward-compatible defaults after extraction", function () {

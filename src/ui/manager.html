@@ -14,41 +14,55 @@
           <p class="hint" data-i18n="appHint">按精确、包含或正则方式匹配请求 URL，并替换、合并或动态转换响应。命中次数实时记录，右侧日志可查看每一次拦截的原始与改写内容。</p>
         </div>
         <div class="header-controls">
-          <div class="header-interception">
-            <div class="header-interception-label">
-              <span id="interceptionEnabledLabel" data-i18n="interception">全局拦截</span>
-              <button type="button" class="header-help-button" aria-label="查看运行范围与全局拦截说明" data-i18n-aria-label="interceptionHelp" data-tooltip="扩展会在所有 URL 和子 frame 中运行；关闭全局开关后所有规则暂停生效，但不会删除规则和日志。" data-i18n-tooltip="globalScopeHint">
+          <div class="header-toolbar">
+            <!-- External links -->
+            <a href="https://github.com/FutaoSmile/ResponseRewriter" class="header-icon-link" target="_blank" rel="noopener" title="GitHub" aria-label="GitHub 项目主页">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+            </a>
+            <span class="header-divider"></span>
+
+            <!-- App controls -->
+            <button type="button" id="themeToggleButton" class="header-icon-link" title="切换浅色/暗黑主题" aria-label="切换主题" data-i18n-title="theme">
+              <svg class="icon-sun" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="currentColor"/><path d="M8 1v1M8 14v1M1 8h1M14 8h1M3.05 3.05l.7.7M12.25 12.25l.7.7M3.05 12.95l.7-.7M12.25 3.75l.7-.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <svg class="icon-moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.6 10.2A6.1 6.1 0 0 1 5.8 2.4a6 6 0 1 0 7.8 7.8Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div class="locale-picker">
+              <button type="button" id="localeMenuButton" class="header-icon-link" popovertarget="localeMenu" aria-haspopup="menu" aria-expanded="false" title="语言" aria-label="语言" data-i18n-title="language" data-i18n-aria-label="language">
                 <svg viewBox="0 0 16 16" aria-hidden="true">
                   <circle cx="8" cy="8" r="6.25"></circle>
-                  <path d="M8 7.25v4M8 4.75h.01"></path>
+                  <path d="M1.75 8h12.5M8 1.75c1.65 1.7 2.5 3.78 2.5 6.25S9.65 12.55 8 14.25C6.35 12.55 5.5 10.47 5.5 8S6.35 3.45 8 1.75z"></path>
                 </svg>
               </button>
+              <div id="localeMenu" class="locale-menu" popover role="menu" aria-labelledby="localeMenuButton">
+                <button type="button" class="locale-option" role="menuitemradio" data-locale="zh-CN" lang="zh-CN">
+                  <span>中文</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8.5 3 3 7-7"></path></svg>
+                </button>
+                <button type="button" class="locale-option" role="menuitemradio" data-locale="en" lang="en">
+                  <span>English</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8.5 3 3 7-7"></path></svg>
+                </button>
+                <button type="button" class="locale-option" role="menuitemradio" data-locale="ja" lang="ja">
+                  <span>日本語</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8.5 3 3 7-7"></path></svg>
+                </button>
+                <button type="button" class="locale-option" role="menuitemradio" data-locale="ko" lang="ko">
+                  <span>한국어</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8.5 3 3 7-7"></path></svg>
+                </button>
+              </div>
             </div>
-            <label class="header-interception-control">
-              <strong id="interceptionStatusText" data-i18n="interceptionOn">已开启</strong>
-              <span class="switch">
-                <input id="interceptionEnabled" type="checkbox" checked aria-labelledby="interceptionEnabledLabel interceptionStatusText" aria-describedby="interceptionHint">
-                <span class="switch-slider"></span>
-              </span>
-            </label>
+
+            <span class="header-divider"></span>
+
+            <!-- Interception toggle -->
+            <div class="header-interception">
+              <label class="header-icon-link header-interception-control" data-tooltip="全局拦截：已开启&#10;扩展会在所有 URL 和子 frame 中运行；关闭后规则与日志不变。" data-i18n-tooltip="globalScopeHint" data-tooltip-two-lines>
+                <input id="interceptionEnabled" type="checkbox" checked aria-label="全局拦截：已开启" aria-describedby="interceptionHint">
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M8 1.75v5"></path>
+                  <path d="M4.25 3.75a5.5 5.5 0 1 0 7.5 0"></path>
+                </svg>
+              </label>
+            </div>
             <span id="interceptionHint" class="visually-hidden" data-i18n="interceptionHint">关闭后所有规则暂停生效，但不会删除规则和日志。</span>
           </div>
-          <label class="header-select">
-            <span data-i18n="theme">主题</span>
-            <select id="themeSelect">
-              <option value="light" data-i18n="themeLight">浅色</option>
-              <option value="dark" data-i18n="themeDark">暗黑</option>
-            </select>
-          </label>
-          <label class="header-select">
-            <span data-i18n="language">语言</span>
-            <select id="localeSelect">
-              <option value="zh-CN">中文</option>
-              <option value="en">English</option>
-              <option value="ja">日本語</option>
-              <option value="ko">한국어</option>
-            </select>
-          </label>
         </div>
       </header>
 
@@ -56,13 +70,15 @@
         <!-- Left: Rules -->
         <section class="panel manager-rules">
           <div class="panel-bar">
-            <div>
+            <div class="panel-title-line">
               <h2 data-i18n="rulesTitle">规则列表</h2>
-              <p id="ruleOrderHint" class="panel-note" data-i18n="ruleOrderHint">规则从上到下执行，直接返回规则以第一条命中为准。</p>
-              <div id="ruleSortHelp" class="sort-help" role="note">
-                <span data-i18n="ruleCrossPageHint">当前页可直接拖动；跨页排序请聚焦手柄后按</span>
-                <span class="key-sequence"><kbd>Alt</kbd><span>+</span><kbd>↑</kbd><span>/</span><kbd>↓</kbd></span>
-              </div>
+              <button type="button" class="panel-info-button" aria-label="规则从上到下执行，直接返回规则以第一条命中为准。" data-i18n-aria-label="ruleOrderHint" data-tooltip="规则从上到下执行，直接返回规则以第一条命中为准。" data-i18n-tooltip="ruleOrderHint" data-tooltip-nowrap>
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <circle cx="8" cy="8" r="6.25"></circle>
+                  <path d="M8 7.25v4M8 4.75h.01"></path>
+                </svg>
+              </button>
+              <span id="ruleOrderHint" class="visually-hidden" data-i18n="ruleOrderHint">规则从上到下执行，直接返回规则以第一条命中为准。</span>
             </div>
             <div class="panel-actions">
               <input id="importRulesFile" type="file" accept="application/json,.json" hidden>
@@ -137,6 +153,31 @@
 
       <div id="status" role="status" aria-live="polite"></div>
     </main>
+
+    <!-- Privacy Consent Modal -->
+    <div id="privacyConsentModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop"></div>
+      <section class="modal-card modal-card-small privacy-consent-dialog" role="dialog" aria-modal="true" aria-labelledby="privacyConsentTitle" aria-describedby="privacyConsentSummary">
+        <div class="modal-header">
+          <div>
+            <h2 id="privacyConsentTitle" data-i18n="privacyConsentTitle">启用前请确认数据处理方式</h2>
+            <p id="privacyConsentSummary" class="panel-note" data-i18n="privacyConsentSummary">拦截启用后，ResponseRewriter 会在本机处理匹配请求的数据，用于改写响应和展示日志。</p>
+          </div>
+        </div>
+        <ul class="privacy-consent-list">
+          <li data-i18n="privacyConsentData">处理请求 URL、请求方法、原始响应和改写后响应。</li>
+          <li data-i18n="privacyConsentStorage">规则和日志仅保存在 Chrome 本地存储；最多保留 100 条日志，每段响应最多保存 20,000 个字符。</li>
+          <li data-i18n="privacyConsentSharing">数据不会发送给开发者或第三方；你可以随时暂停拦截或清空日志。</li>
+        </ul>
+        <p class="privacy-consent-policy">
+          <a href="https://github.com/FutaoSmile/ResponseRewriter/blob/master/PRIVACY.md" target="_blank" rel="noopener" data-i18n="privacyPolicyLink">查看完整隐私政策</a>
+        </p>
+        <div class="form-actions">
+          <button id="privacyConsentLaterButton" type="button" data-i18n="privacyConsentLater">暂不启用</button>
+          <button id="privacyConsentAcceptButton" type="button" class="primary" data-i18n="privacyConsentAccept">同意并启用拦截</button>
+        </div>
+      </section>
+    </div>
 
     <!-- Rule Edit Modal -->
     <div id="ruleModal" class="modal hidden" aria-hidden="true">

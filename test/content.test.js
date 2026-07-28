@@ -5,19 +5,39 @@ const test = require("node:test");
 const vm = require("node:vm");
 
 const contentSource = fs.readFileSync(path.join(__dirname, "..", "src", "content.js"), "utf8");
+const testChannel = "11111111-1111-4111-8111-111111111111";
 
 function normalizeRules(rules) {
-  let postedMessage;
+  let rulesSnapshot;
+  const listeners = {};
+  function FakeCustomEvent(type, options) {
+    this.type = type;
+    this.detail = options && options.detail;
+  }
+  const windowObject = {
+    addEventListener(type, listener) {
+      listeners[type] = listener;
+    },
+    dispatchEvent(event) {
+      if (event.type === "response-rewriter:bootstrap-request") {
+        listeners["response-rewriter:bootstrap-response"](new FakeCustomEvent(
+          "response-rewriter:bootstrap-response",
+          { detail: testChannel }
+        ));
+      }
+      if (event.type.endsWith(":rules")) {
+        rulesSnapshot = JSON.parse(event.detail);
+      }
+    }
+  };
   const appendTarget = {
-    appendChild() {}
+    appendChild(script) {
+      script.onload();
+    }
   };
   const context = {
-    window: {
-      postMessage(data) {
-        postedMessage = data;
-      },
-      addEventListener() {}
-    },
+    window: windowObject,
+    CustomEvent: FakeCustomEvent,
     document: {
       documentElement: appendTarget,
       head: null,
@@ -37,7 +57,11 @@ function normalizeRules(rules) {
       storage: {
         local: {
           get(defaults, callback) {
-            callback({ rules: rules });
+            callback({
+              rules: rules,
+              interceptionEnabled: true,
+              privacyConsentVersion: 1
+            });
           }
         },
         onChanged: {
@@ -49,13 +73,21 @@ function normalizeRules(rules) {
 
   vm.createContext(context);
   vm.runInContext(contentSource, context);
-  return postedMessage.rules;
+  return rulesSnapshot.rules;
 }
 
 function recordHit(hit, existingLogs) {
   let savedValue = null;
-  let messageListener = null;
-  const appendTarget = { appendChild() {} };
+  const listeners = {};
+  function FakeCustomEvent(type, options) {
+    this.type = type;
+    this.detail = options && options.detail;
+  }
+  const appendTarget = {
+    appendChild(script) {
+      script.onload();
+    }
+  };
   const storedRule = {
     id: hit.ruleId,
     enabled: true,
@@ -65,13 +97,23 @@ function recordHit(hit, existingLogs) {
     stats: {}
   };
   const windowObject = {
-    postMessage() {},
     addEventListener(type, listener) {
-      if (type === "message") messageListener = listener;
+      listeners[type] = listener;
+    },
+    dispatchEvent() {
+      const event = arguments[0];
+      if (event.type === "response-rewriter:bootstrap-request") {
+        listeners["response-rewriter:bootstrap-response"](new FakeCustomEvent(
+          "response-rewriter:bootstrap-response",
+          { detail: testChannel }
+        ));
+      }
+      return true;
     }
   };
   const context = {
     window: windowObject,
+    CustomEvent: FakeCustomEvent,
     document: {
       documentElement: appendTarget,
       head: null,
@@ -93,7 +135,8 @@ function recordHit(hit, existingLogs) {
             callback({
               rules: [storedRule],
               logs: existingLogs || [],
-              interceptionEnabled: true
+              interceptionEnabled: true,
+              privacyConsentVersion: 1
             });
           },
           set(value) {
@@ -110,13 +153,10 @@ function recordHit(hit, existingLogs) {
 
   vm.createContext(context);
   vm.runInContext(contentSource, context);
-  messageListener({
-    source: windowObject,
-    data: Object.assign({
-      source: "response-rewriter-page",
-      type: "RULE_HIT"
-    }, hit)
-  });
+  listeners["response-rewriter:" + testChannel + ":hit"](new FakeCustomEvent(
+    "response-rewriter:" + testChannel + ":hit",
+    { detail: JSON.stringify(hit) }
+  ));
   return savedValue;
 }
 
@@ -198,4 +238,73 @@ test("hit logs expose truncation metadata and retain only the latest 100 entries
   assert.equal(saved.logs[0].rewrittenResponseLength, 20002);
   assert.equal(saved.logs[0].errorMessage, "expected failure");
   assert.match(saved.logs[0].originalResponse, /\[truncated\]$/);
+});
+
+test("rule data uses a per-frame event channel instead of public window messages", function () {
+  assert.doesNotMatch(contentSource, /window\.postMessage|addEventListener\("message"/);
+  assert.doesNotMatch(contentSource, /response-rewriter-(?:extension|page)/);
+  assert.match(contentSource, /BOOTSTRAP_REQUEST_EVENT/);
+  assert.match(contentSource, /new CustomEvent\(rulesEvent/);
+});
+
+test("the page interceptor stays unpatched before privacy consent", function () {
+  let rulesSnapshot = null;
+  const listeners = {};
+  function FakeCustomEvent(type, options) {
+    this.type = type;
+    this.detail = options && options.detail;
+  }
+  const context = {
+    window: {
+      addEventListener(type, listener) {
+        listeners[type] = listener;
+      },
+      dispatchEvent(event) {
+        if (event.type === "response-rewriter:bootstrap-request") {
+          listeners["response-rewriter:bootstrap-response"](new FakeCustomEvent(
+            "response-rewriter:bootstrap-response",
+            { detail: testChannel }
+          ));
+        } else if (event.type.endsWith(":rules")) {
+          rulesSnapshot = JSON.parse(event.detail);
+        }
+      }
+    },
+    CustomEvent: FakeCustomEvent,
+    document: {
+      documentElement: {},
+      head: null,
+      body: null,
+      createElement() { return {}; }
+    },
+    chrome: {
+      runtime: {
+        getURL(value) {
+          return value;
+        },
+        sendMessage() {}
+      },
+      storage: {
+        local: {
+          get(defaults, callback) {
+            callback({
+              rules: [],
+              interceptionEnabled: true,
+              privacyConsentVersion: 0
+            });
+          }
+        },
+        onChanged: {
+          addListener() {}
+        }
+      }
+    },
+    console: { error() {} }
+  };
+
+  vm.createContext(context);
+  vm.runInContext(contentSource, context);
+  assert.deepEqual(rulesSnapshot.rules, []);
+  assert.equal(rulesSnapshot.interceptionEnabled, false);
+  assert.equal(rulesSnapshot.privacyConsentGranted, false);
 });

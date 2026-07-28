@@ -5,6 +5,7 @@ const test = require("node:test");
 const vm = require("node:vm");
 
 const injectedSource = fs.readFileSync(path.join(__dirname, "..", "src", "injected.js"), "utf8");
+const testChannel = "11111111-1111-4111-8111-111111111111";
 
 function createElement(elementsById) {
   return {
@@ -34,10 +35,10 @@ function createElement(elementsById) {
 }
 
 function createHarness(originalBody) {
-  const messageListeners = [];
+  const eventListeners = {};
   const elementsById = {};
   const errors = [];
-  const pageMessages = [];
+  const pageEvents = [];
   let fetchCallCount = 0;
   let xhrSendCount = 0;
 
@@ -65,14 +66,24 @@ function createHarness(originalBody) {
   };
 
   const documentElement = createElement(elementsById);
+  function FakeCustomEvent(type, options) {
+    this.type = type;
+    this.detail = options && options.detail;
+  }
   const windowObject = {
     location: { href: "https://app.example.com/" },
     addEventListener(type, listener) {
-      if (type === "message") messageListeners.push(listener);
+      if (!eventListeners[type]) eventListeners[type] = [];
+      eventListeners[type].push(listener);
     },
-    postMessage(message) {
-      pageMessages.push(message);
+    dispatchEvent(event) {
+      pageEvents.push(event);
+      (eventListeners[event.type] || []).forEach(function (listener) {
+        listener(event);
+      });
+      return true;
     },
+    CustomEvent: FakeCustomEvent,
     fetch() {
       fetchCallCount += 1;
       return Promise.resolve(new Response(originalBody, {
@@ -95,6 +106,7 @@ function createHarness(originalBody) {
       }
     },
     navigator: { language: "zh-CN" },
+    crypto: { randomUUID() { return testChannel; } },
     XMLHttpRequest: FakeXHR,
     URL: URL,
     Response: Response,
@@ -125,19 +137,23 @@ function createHarness(originalBody) {
       return xhrSendCount;
     },
     getPageMessages() {
-      return pageMessages.slice();
-    },
-    setRules(rules, interceptionEnabled) {
-      messageListeners.forEach(function (listener) {
-        listener({
-          source: windowObject,
-          data: {
-            source: "response-rewriter-extension",
-            type: "SET_RULES",
-            rules: rules,
-            interceptionEnabled: interceptionEnabled !== false
-          }
+      return pageEvents
+        .filter(function (event) {
+          return event.type === "response-rewriter:" + testChannel + ":hit";
+        })
+        .map(function (event) {
+          return Object.assign({ type: "RULE_HIT" }, JSON.parse(event.detail));
         });
+    },
+    setRules(rules, interceptionEnabled, privacyConsentGranted) {
+      (eventListeners["response-rewriter:" + testChannel + ":rules"] || []).forEach(function (listener) {
+        listener(new FakeCustomEvent("response-rewriter:" + testChannel + ":rules", {
+          detail: JSON.stringify({
+            rules: rules,
+            interceptionEnabled: interceptionEnabled !== false,
+            privacyConsentGranted: privacyConsentGranted !== false
+          })
+        }));
       });
     },
     async fetchText(url, init) {
@@ -165,6 +181,21 @@ function createRule(overrides) {
 
   return Object.assign(rule, overrides);
 }
+
+test("page bridge uses the per-frame channel and no public message marker", function () {
+  assert.doesNotMatch(injectedSource, /window\.postMessage|addEventListener\("message"/);
+  assert.doesNotMatch(injectedSource, /response-rewriter-(?:extension|page)/);
+  assert.match(injectedSource, /crypto\.randomUUID\(\)/);
+  assert.match(injectedSource, /BOOTSTRAP_REQUEST_EVENT/);
+  assert.match(injectedSource, /new PageCustomEvent\(HIT_EVENT/);
+});
+
+test("XHR and fetch remain native until privacy consent is granted", async function () {
+  const harness = createHarness("original");
+  assert.equal(await harness.fetchText("https://api.example.com/api/users/123"), "original");
+  assert.equal(harness.getFetchCallCount(), 1);
+  assert.equal(harness.getXhrSendCount(), 0);
+});
 
 test("legacy rules default to exact URL matching and whole-body replacement", async function () {
   const harness = createHarness("original");

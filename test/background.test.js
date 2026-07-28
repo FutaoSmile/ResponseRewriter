@@ -108,6 +108,7 @@ test("paused interception is continuously visible on the extension badge", funct
 test("resuming interception restores the hit-count badge", function () {
   const harness = createHarness({
     interceptionEnabled: false,
+    privacyConsentVersion: 1,
     rules: [{ stats: { hitCount: 7 } }]
   });
   harness.refresh();
@@ -129,9 +130,10 @@ test("first install initializes disabled examples and sample logs", function () 
   assert.equal(state.logs.length, 4);
   assert.ok(state.rules.every(function (rule) { return rule.enabled === false; }));
   assert.ok(state.logs.every(function (log) { return log.isExample === true; }));
+  assert.equal(state.privacyConsentVersion, 0);
 });
 
-test("updates and existing install data are never overwritten", function () {
+test("existing install data is preserved while missing consent state is initialized", function () {
   const existingRules = [{ id: "custom-rule" }];
   const existingLogs = [{ id: "custom-log" }];
   const harness = createHarness({ rules: existingRules, logs: existingLogs });
@@ -139,7 +141,20 @@ test("updates and existing install data are never overwritten", function () {
   harness.install({ reason: "update" });
   harness.install({ reason: "install" });
 
-  assert.equal(harness.storageWrites.length, 0);
+  assert.equal(harness.storageWrites.length, 1);
   assert.equal(harness.getState().rules, existingRules);
   assert.equal(harness.getState().logs, existingLogs);
+  assert.equal(harness.getState().privacyConsentVersion, 0);
+});
+
+test("interception stays paused until privacy consent is granted", function () {
+  const harness = createHarness({
+    interceptionEnabled: true,
+    rules: [{ stats: { hitCount: 7 } }]
+  });
+  harness.refresh();
+
+  assert.ok(harness.badgeCalls.some(function (entry) {
+    return entry[0] === "text" && entry[1].text === "OFF";
+  }));
 });

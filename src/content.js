@@ -1,11 +1,16 @@
 (function () {
   // Content scripts run in Chrome's isolated world. The interceptor must be injected
   // into the page world to replace that page's XMLHttpRequest and fetch functions.
-  const SOURCE = "response-rewriter-extension";
-  const PAGE_SOURCE = "response-rewriter-page";
   const MAX_LOGS = 100;
   const MAX_RESPONSE_LENGTH = 20000;
   const INTERCEPTION_ENABLED_KEY = "interceptionEnabled";
+  const PRIVACY_CONSENT_KEY = "privacyConsentVersion";
+  const REQUIRED_PRIVACY_CONSENT_VERSION = 1;
+  const BOOTSTRAP_REQUEST_EVENT = "response-rewriter:bootstrap-request";
+  const BOOTSTRAP_RESPONSE_EVENT = "response-rewriter:bootstrap-response";
+  let rulesEvent = "";
+  let hitEvent = "";
+  let openManagerEvent = "";
 
   function createRuleId() {
     return "rule-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -65,37 +70,30 @@
     return value.slice(0, MAX_RESPONSE_LENGTH) + "\n\n[truncated]";
   }
 
-  function injectPageScript() {
-    // A script element loaded from the extension is the MV3-compatible way to cross
-    // the isolated-world boundary; importing this file in the content script would
-    // patch the wrong global objects.
-    const script = document.createElement("script");
-    script.src = chrome.runtime.getURL("src/injected.js");
-    script.onload = function () {
-      script.remove();
-    };
-    (document.documentElement || document.head || document.body).appendChild(script);
-  }
-
-  function sendRulesToPage(rules, interceptionEnabled) {
-    // window.postMessage is used because extension APIs are unavailable in the page
-    // world. SOURCE is checked by the receiver since "*" is required for same-window
-    // pages whose origin may vary during document_start.
-    window.postMessage(
-      {
-        source: SOURCE,
-        type: "SET_RULES",
+  function sendRulesToPage(rules, interceptionEnabled, privacyConsentGranted) {
+    if (!rulesEvent) return;
+    window.dispatchEvent(new CustomEvent(rulesEvent, {
+      detail: JSON.stringify({
         rules: rules,
-        interceptionEnabled: interceptionEnabled !== false
-      },
-      "*"
-    );
+        interceptionEnabled: interceptionEnabled !== false,
+        privacyConsentGranted: privacyConsentGranted === true
+      })
+    }));
   }
 
   function loadRulesAndSync() {
-    chrome.storage.local.get({ rules: [], [INTERCEPTION_ENABLED_KEY]: true }, function (result) {
+    chrome.storage.local.get({
+      rules: [],
+      [INTERCEPTION_ENABLED_KEY]: true,
+      [PRIVACY_CONSENT_KEY]: 0
+    }, function (result) {
+      if (result[PRIVACY_CONSENT_KEY] !== REQUIRED_PRIVACY_CONSENT_VERSION) {
+        sendRulesToPage([], false, false);
+        return;
+      }
+
       const normalized = normalizeRules(result.rules);
-      sendRulesToPage(normalized, result[INTERCEPTION_ENABLED_KEY]);
+      sendRulesToPage(normalized, result[INTERCEPTION_ENABLED_KEY], true);
     });
   }
 
@@ -106,7 +104,15 @@
 
     // Keep statistics and the corresponding log entry in one storage write so the
     // manager never observes a hit count without its detail record (or vice versa).
-    chrome.storage.local.get({ rules: [], logs: [] }, function (result) {
+    chrome.storage.local.get({
+      rules: [],
+      logs: [],
+      [PRIVACY_CONSENT_KEY]: 0
+    }, function (result) {
+      if (result[PRIVACY_CONSENT_KEY] !== REQUIRED_PRIVACY_CONSENT_VERSION) {
+        return;
+      }
+
       const rules = normalizeRules(result.rules);
       const matchedRule = rules.find(function (rule) {
         return rule.id === hit.ruleId;
@@ -163,35 +169,40 @@
     });
   }
 
-  loadRulesAndSync();
-
   chrome.storage.onChanged.addListener(function (changes, areaName) {
-    if (areaName !== "local" || (!changes.rules && !changes[INTERCEPTION_ENABLED_KEY])) {
+    if (areaName !== "local" ||
+        (!changes.rules && !changes[INTERCEPTION_ENABLED_KEY] && !changes[PRIVACY_CONSENT_KEY])) {
       return;
     }
 
     loadRulesAndSync();
   });
 
-  window.addEventListener("message", function (event) {
-    // Page scripts can also call postMessage. Validate both the window and the
-    // private source marker before treating a message as extension data.
-    if (event.source !== window || !event.data || event.data.source !== PAGE_SOURCE) {
-      return;
-    }
+  window.addEventListener(BOOTSTRAP_RESPONSE_EVENT, function (event) {
+    var channelId = typeof event.detail === "string" ? event.detail : "";
+    if (!/^[0-9a-f-]{36}$/i.test(channelId)) return;
 
-    if (event.data.type === "REQUEST_RULES") {
-      loadRulesAndSync();
-    }
+    rulesEvent = "response-rewriter:" + channelId + ":rules";
+    hitEvent = "response-rewriter:" + channelId + ":hit";
+    openManagerEvent = "response-rewriter:" + channelId + ":open-manager";
 
-    if (event.data.type === "RULE_HIT") {
-      recordRuleHit(event.data);
-    }
+    window.addEventListener(hitEvent, function (hitEventData) {
+      try {
+        recordRuleHit(JSON.parse(hitEventData.detail || "{}"));
+      } catch (error) {
+        console.error("ResponseRewriter ignored an invalid intercept event.");
+      }
+    });
 
-    if (event.data.type === "OPEN_MANAGER") {
+    window.addEventListener(openManagerEvent, function () {
       chrome.runtime.sendMessage({ type: "OPEN_MANAGER" });
-    }
-  });
+    });
 
-  injectPageScript();
+    loadRulesAndSync();
+  }, { once: true });
+
+  // Both scripts are declared at document_start with the MAIN-world bootstrap first.
+  // The one-time handshake completes before website scripts can observe its public
+  // event names; all rule and log traffic then uses the random per-frame channel.
+  window.dispatchEvent(new CustomEvent(BOOTSTRAP_REQUEST_EVENT));
 })();

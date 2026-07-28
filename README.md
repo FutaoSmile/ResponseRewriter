@@ -1,13 +1,17 @@
 # ResponseRewriter
 
 <p align="center">
+  <img src="./src/icons/icon-master.png" width="144" height="144" alt="ResponseRewriter 图标">
+</p>
+
+<p align="center">
   <strong>无需改后端、不用起 Mock 服务，直接在浏览器里拦截并改写接口响应。</strong>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Chrome-MV3-blue?logo=googlechrome&logoColor=white" alt="Chrome MV3">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License">
-  <img src="https://img.shields.io/badge/tests-39%20passed-brightgreen" alt="39 tests passed">
+  <img src="https://img.shields.io/badge/tests-69%20passed-brightgreen" alt="69 tests passed">
   <a href="./README.en.md">English</a>
 </p>
 
@@ -93,11 +97,11 @@ return data;
 
 **暗黑模式、四国语言**
 
-中日英韩完整翻译，浅色/暗黑跟随系统或手动切换
+中日英韩完整翻译；点击右上角语言图标选择语言，使用太阳/月亮图标切换浅色与暗黑主题
 
 **零依赖，纯原生实现**
 
-不装 Node 也能用。`node --test` 直接跑 39 项测试，覆盖率包括 UI 模块、规则模型、响应差异格式化等
+不装 Node 也能用。`node --test` 直接跑 69 项测试，覆盖 UI 模块、规则模型、响应差异格式化、隐私同意与页面通信边界等
 
 ---
 
@@ -108,6 +112,10 @@ Chrome 只申请两个权限，不读取浏览历史、不访问 cookie：
 - `storage` — 本地保存规则和日志
 - `<all_urls>` — 让注入脚本能在你要调试的页面中运行
 
+首次启用拦截前，扩展会明确说明本地处理的数据并征得同意。只有同意后才会安装 XHR/Fetch 拦截器；命中的请求 URL、请求方法、原始响应和改写后响应仅保存在本机，不会发送给开发者或第三方。详见 [隐私政策](./PRIVACY.md)。
+
+支持 Chrome 114 及以上版本。
+
 ---
 
 ## 注意事项
@@ -117,7 +125,7 @@ Chrome 只申请两个权限，不读取浏览历史、不访问 cookie：
 - JS 转换脚本在页面上下文执行，请只使用自己编写的可信脚本
 - 这是开发和测试工具，不建议在包含敏感数据的页面持续启用
 
-完整说明见 [注意事项和限制](#注意事项和限制)。
+完整说明见 [注意事项和限制](#注意事项)。
 
 ---
 

@@ -1,13 +1,17 @@
 # ResponseRewriter
 
 <p align="center">
+  <img src="./src/icons/icon-master.png" width="144" height="144" alt="ResponseRewriter icon">
+</p>
+
+<p align="center">
   <strong>A Chrome extension that lets you intercept and rewrite XHR / Fetch responses — no backend changes, no mock server needed.</strong>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Chrome-MV3-blue?logo=googlechrome&logoColor=white" alt="Chrome MV3">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License">
-  <img src="https://img.shields.io/badge/tests-39%20passed-brightgreen" alt="39 tests passed">
+  <img src="https://img.shields.io/badge/tests-69%20passed-brightgreen" alt="69 tests passed">
   <a href="./README.md">简体中文</a>
 </p>
 
@@ -93,11 +97,11 @@ Drag-and-drop or `Alt+↑/↓` keyboard sorting. When multiple rules match a req
 
 **Dark mode · Four languages**
 
-Full translations in English, Chinese, Japanese, and Korean. Light/dark themes follow the system or switch manually
+Full translations in English, Chinese, Japanese, and Korean. Use the language menu in the header, and switch themes with the sun/moon button
 
 **Zero dependencies, plain JS**
 
-No build step. `node --test` runs 39 tests covering UI modules, rule model validation, response diff formatting, and more
+No build step. `node --test` runs 69 tests covering UI modules, rule model validation, response diff formatting, privacy consent, and the page communication boundary
 
 ---
 
@@ -108,6 +112,10 @@ Only two Chrome permissions, no browsing history, no cookies:
 - `storage` — save rules and logs locally
 - `<all_urls>` — let the content script run on pages you want to debug
 
+Before interception is enabled for the first time, the extension explains what it handles locally and asks for consent. XHR/Fetch hooks are installed only after consent. Matched request URLs, methods, original responses, and rewritten responses remain on your device and are not sent to the developer or third parties. See the [Privacy Policy](./PRIVACY.md).
+
+Requires Chrome 114 or later.
+
 ---
 
 ## Notes
@@ -117,7 +125,7 @@ Only two Chrome permissions, no browsing history, no cookies:
 - JavaScript transforms run in page context — only use scripts you wrote and trust
 - This is a development and testing tool — pause interception when not needed on sensitive pages
 
-Full details in [Notes and Limitations](#notes-and-limitations).
+Full details in [Notes and Limitations](#notes).
 
 ---
 

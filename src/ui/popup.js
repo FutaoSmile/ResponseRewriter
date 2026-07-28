@@ -3,6 +3,8 @@ const LOGS_PAGE_SIZE = 10;
 const DEFAULT_THEME = "light";
 const THEME_STORAGE_KEY = "theme";
 const INTERCEPTION_ENABLED_KEY = "interceptionEnabled";
+const PRIVACY_CONSENT_KEY = "privacyConsentVersion";
+const REQUIRED_PRIVACY_CONSENT_VERSION = 1;
 const elements = {
   ruleList: document.getElementById("ruleList"),
   logList: document.getElementById("logList"),
@@ -55,12 +57,16 @@ const elements = {
   clearLogsButton: document.getElementById("clearLogsButton"),
   logSearchInput: document.getElementById("logSearchInput"),
   logTypeFilter: document.getElementById("logTypeFilter"),
-  localeSelect: document.getElementById("localeSelect"),
-  themeSelect: document.getElementById("themeSelect")
+  localeMenu: document.getElementById("localeMenu"),
+  localeMenuButton: document.getElementById("localeMenuButton"),
+  themeToggleButton: document.getElementById("themeToggleButton"),
+  privacyConsentModal: document.getElementById("privacyConsentModal"),
+  privacyConsentLaterButton: document.getElementById("privacyConsentLaterButton"),
+  privacyConsentAcceptButton: document.getElementById("privacyConsentAcceptButton")
 };
 
 elements.interceptionEnabled = document.getElementById("interceptionEnabled");
-elements.interceptionStatusText = document.getElementById("interceptionStatusText");
+elements.interceptionControl = document.querySelector(".header-interception-control");
 elements.ruleSearchInput = document.getElementById("ruleSearchInput");
 elements.ruleStatusFilter = document.getElementById("ruleStatusFilter");
 elements.ruleModeFilter = document.getElementById("ruleModeFilter");
@@ -74,6 +80,7 @@ elements.uiTooltip = document.getElementById("uiTooltip");
 let currentLocale = DEFAULT_LOCALE;
 let currentTheme = DEFAULT_THEME;
 let interceptionEnabled = true;
+let privacyConsentGranted = false;
 let rules = [];
 let editingRuleId = "";
 let deleteRuleId = "";
@@ -106,21 +113,55 @@ function normalizeTheme(value) {
 
 function applyTheme() {
   document.documentElement.dataset.theme = currentTheme;
+  updateThemeToggleUi();
+}
 
-  if (elements.themeSelect) {
-    elements.themeSelect.value = currentTheme;
-  }
+function updateThemeToggleUi() {
+  if (!elements.themeToggleButton) return;
+  var currentThemeLabel = t(currentTheme === "dark" ? "themeDark" : "themeLight");
+  var label = t("theme") + ": " + currentThemeLabel;
+  elements.themeToggleButton.title = label;
+  elements.themeToggleButton.setAttribute("aria-label", label);
+}
+
+function updateLocaleMenuUi() {
+  if (!elements.localeMenu) return;
+  elements.localeMenu.querySelectorAll("[data-locale]").forEach(function (button) {
+    var isCurrent = button.dataset.locale === currentLocale;
+    button.classList.toggle("is-current", isCurrent);
+    button.setAttribute("aria-checked", String(isCurrent));
+  });
+}
+
+function positionLocaleMenu() {
+  if (!elements.localeMenu || !elements.localeMenuButton) return;
+  var triggerRect = elements.localeMenuButton.getBoundingClientRect();
+  var menuWidth = 168;
+  elements.localeMenu.style.top = Math.round(triggerRect.bottom + 8) + "px";
+  elements.localeMenu.style.left = Math.round(
+    Math.max(8, Math.min(triggerRect.right - menuWidth, window.innerWidth - menuWidth - 8))
+  ) + "px";
 }
 
 function updateInterceptionUi() {
+  var effectiveEnabled = privacyConsentGranted && interceptionEnabled;
+  var stateLabel = privacyConsentGranted
+    ? t(effectiveEnabled ? "interceptionOn" : "interceptionOff")
+    : t("interceptionConsentRequired");
   if (elements.interceptionEnabled) {
-    elements.interceptionEnabled.checked = interceptionEnabled;
+    elements.interceptionEnabled.checked = effectiveEnabled;
+    elements.interceptionEnabled.setAttribute(
+      "aria-label",
+      t("interception") + ": " + stateLabel
+    );
   }
-  if (elements.interceptionStatusText) {
-    elements.interceptionStatusText.textContent = t(interceptionEnabled ? "interceptionOn" : "interceptionOff");
-    elements.interceptionStatusText.dataset.state = interceptionEnabled ? "on" : "off";
+  if (elements.interceptionControl) {
+    elements.interceptionControl.dataset.tooltip =
+      t("interception") + ": " +
+      stateLabel +
+      "\n" + t("globalScopeHint");
   }
-  document.documentElement.dataset.interception = interceptionEnabled ? "on" : "off";
+  document.documentElement.dataset.interception = effectiveEnabled ? "on" : "off";
 }
 
 function applyLocale() {
@@ -143,10 +184,8 @@ function applyLocale() {
     node.dataset.tooltip = t(node.dataset.i18nTooltip);
   });
 
-  var localeSelect = document.getElementById("localeSelect");
-  if (localeSelect) {
-    localeSelect.value = currentLocale;
-  }
+  updateThemeToggleUi();
+  updateLocaleMenuUi();
 
   if (elements.ruleModal && !elements.ruleModal.classList.contains("hidden")) {
     elements.ruleModalTitle.textContent = t(modalMode === "create" ? "createRuleTitle" : "editRuleTitle");
@@ -366,6 +405,8 @@ function showTooltip(target, delay) {
   tooltipTimer = setTimeout(function () {
     if (tooltipTarget !== target || !target.isConnected) return;
 
+    elements.uiTooltip.classList.toggle("is-nowrap", target.hasAttribute("data-tooltip-nowrap"));
+    elements.uiTooltip.classList.toggle("is-two-lines", target.hasAttribute("data-tooltip-two-lines"));
     elements.uiTooltip.textContent = target.dataset.tooltip;
     elements.uiTooltip.hidden = false;
 
@@ -514,7 +555,7 @@ function renderRuleList() {
     item.className = "rule-item";
     item.innerHTML =
       '<span class="rule-title" data-label="' + escapeHtml(t("rule")) + '"><span class="rule-title-value">' +
-        '<button type="button" class="drag-handle" data-drag-handle data-rule-id="' + escapedRuleId + '" aria-describedby="ruleOrderHint ruleSortHelp" data-tooltip="' + escapeHtml(t("dragRule", { name: rule.name })) + '" aria-label="' + escapeHtml(t("dragRule", { name: rule.name })) + '">' +
+        '<button type="button" class="drag-handle" data-drag-handle data-rule-id="' + escapedRuleId + '" aria-describedby="ruleOrderHint" data-tooltip="' + escapeHtml(t("dragRule", { name: rule.name })) + '" aria-label="' + escapeHtml(t("dragRule", { name: rule.name })) + '">' +
           '<svg viewBox="0 0 16 20" aria-hidden="true"><circle cx="5" cy="5" r="1.25"></circle><circle cx="11" cy="5" r="1.25"></circle><circle cx="5" cy="10" r="1.25"></circle><circle cx="11" cy="10" r="1.25"></circle><circle cx="5" cy="15" r="1.25"></circle><circle cx="11" cy="15" r="1.25"></circle></svg>' +
         '</button>' +
         '<span class="rule-position" aria-label="' + escapeHtml(t("rulePriority", { position: absoluteIndex + 1 })) + '">' + String(absoluteIndex + 1) + '</span><span>' + escapeHtml(rule.name) + '</span></span></span>' +
@@ -666,6 +707,46 @@ function hideModal(modal, restoreFocus) {
       elements.addRuleButton.focus();
     }
   }
+}
+
+function openPrivacyConsentModal() {
+  showModal(elements.privacyConsentModal, elements.privacyConsentLaterButton);
+}
+
+function closePrivacyConsentModal() {
+  hideModal(elements.privacyConsentModal);
+}
+
+function deferPrivacyConsent() {
+  if (elements.privacyConsentLaterButton.disabled) return;
+  elements.privacyConsentLaterButton.disabled = true;
+  savePreference({ [INTERCEPTION_ENABLED_KEY]: false }, function () {
+    interceptionEnabled = false;
+    elements.privacyConsentLaterButton.disabled = false;
+    updateInterceptionUi();
+    closePrivacyConsentModal();
+    setStatus(t("privacyConsentDeferred"));
+  }, function () {
+    elements.privacyConsentLaterButton.disabled = false;
+  });
+}
+
+function acceptPrivacyConsent() {
+  if (elements.privacyConsentAcceptButton.disabled) return;
+  elements.privacyConsentAcceptButton.disabled = true;
+  savePreference({
+    [PRIVACY_CONSENT_KEY]: REQUIRED_PRIVACY_CONSENT_VERSION,
+    [INTERCEPTION_ENABLED_KEY]: true
+  }, function () {
+    privacyConsentGranted = true;
+    interceptionEnabled = true;
+    elements.privacyConsentAcceptButton.disabled = false;
+    updateInterceptionUi();
+    closePrivacyConsentModal();
+    setStatus(t("privacyConsentAccepted"));
+  }, function () {
+    elements.privacyConsentAcceptButton.disabled = false;
+  });
 }
 
 function getRuleFormSnapshot() {
@@ -1000,14 +1081,24 @@ function savePreference(values, onSuccess, onError) {
 }
 
 function loadRules() {
-  chrome.storage.local.get({ rules: [], logs: [], [INTERCEPTION_ENABLED_KEY]: true }, function (result) {
+  chrome.storage.local.get({
+    rules: [],
+    logs: [],
+    [INTERCEPTION_ENABLED_KEY]: true,
+    [PRIVACY_CONSENT_KEY]: 0
+  }, function (result) {
     rules = normalizeRules(result.rules);
     logs = Array.isArray(result.logs) ? result.logs : [];
     interceptionEnabled = result[INTERCEPTION_ENABLED_KEY] !== false;
+    privacyConsentGranted =
+      result[PRIVACY_CONSENT_KEY] === REQUIRED_PRIVACY_CONSENT_VERSION;
     updateInterceptionUi();
     renderRuleList();
     renderLogList();
     setStatus(t("loadedRules"));
+    if (!privacyConsentGranted) {
+      openPrivacyConsentModal();
+    }
   });
 }
 
@@ -1122,27 +1213,53 @@ if (elements.clearRuleFiltersButton) {
   });
 }
 
-if (elements.localeSelect) {
-  elements.localeSelect.addEventListener("change", function () {
-    var nextLocale = elements.localeSelect.value;
+if (elements.localeMenu) {
+  elements.localeMenu.addEventListener("click", function (event) {
+    var option = event.target.closest("[data-locale]");
+    if (!option) return;
+    var nextLocale = option.dataset.locale;
     savePreference({ [LOCALE_STORAGE_KEY]: nextLocale }, function () {
       currentLocale = nextLocale;
       applyLocale();
+      if (elements.localeMenu.matches(":popover-open")) {
+        elements.localeMenu.hidePopover();
+      }
       setStatus(t("loadedRules"));
-    }, function () {
-      elements.localeSelect.value = currentLocale;
     });
+  });
+
+  elements.localeMenu.addEventListener("beforetoggle", function (event) {
+    if (event.newState === "open") positionLocaleMenu();
+  });
+
+  elements.localeMenu.addEventListener("toggle", function (event) {
+    var isOpen = event.newState === "open";
+    elements.localeMenuButton.setAttribute("aria-expanded", String(isOpen));
+    if (!isOpen) return;
+    var currentOption = elements.localeMenu.querySelector(".locale-option.is-current");
+    if (currentOption) currentOption.focus();
+  });
+
+  elements.localeMenu.addEventListener("keydown", function (event) {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    var options = Array.from(elements.localeMenu.querySelectorAll(".locale-option"));
+    var currentIndex = options.indexOf(document.activeElement);
+    var nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? options.length - 1
+        : (currentIndex + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length;
+    event.preventDefault();
+    options[nextIndex].focus();
   });
 }
 
-if (elements.themeSelect) {
-  elements.themeSelect.addEventListener("change", function () {
-    var nextTheme = normalizeTheme(elements.themeSelect.value);
+if (elements.themeToggleButton) {
+  elements.themeToggleButton.addEventListener("click", function () {
+    var nextTheme = currentTheme === "dark" ? "light" : "dark";
     savePreference({ [THEME_STORAGE_KEY]: nextTheme }, function () {
       currentTheme = nextTheme;
       applyTheme();
-    }, function () {
-      elements.themeSelect.value = currentTheme;
     });
   });
 }
@@ -1150,6 +1267,11 @@ if (elements.themeSelect) {
 if (elements.interceptionEnabled) {
   elements.interceptionEnabled.addEventListener("change", function () {
     var nextEnabled = elements.interceptionEnabled.checked;
+    if (nextEnabled && !privacyConsentGranted) {
+      updateInterceptionUi();
+      openPrivacyConsentModal();
+      return;
+    }
     elements.interceptionEnabled.disabled = true;
     savePreference({ [INTERCEPTION_ENABLED_KEY]: nextEnabled }, function () {
       interceptionEnabled = nextEnabled;
@@ -1161,6 +1283,14 @@ if (elements.interceptionEnabled) {
       updateInterceptionUi();
     });
   });
+}
+
+if (elements.privacyConsentLaterButton) {
+  elements.privacyConsentLaterButton.addEventListener("click", deferPrivacyConsent);
+}
+
+if (elements.privacyConsentAcceptButton) {
+  elements.privacyConsentAcceptButton.addEventListener("click", acceptPrivacyConsent);
 }
 
 [elements.ruleName, elements.urlMatchValue, elements.rewriteBody].forEach(function (input) {
@@ -1253,7 +1383,13 @@ document.querySelectorAll("[data-close-modal]").forEach(function (node) {
 });
 
 function getTopOpenModal() {
-  return [elements.deleteModal, elements.hitsModal, elements.logModal, elements.ruleModal].find(function (modal) {
+  return [
+    elements.deleteModal,
+    elements.privacyConsentModal,
+    elements.hitsModal,
+    elements.logModal,
+    elements.ruleModal
+  ].find(function (modal) {
     return modal && !modal.classList.contains("hidden") && modal.getAttribute("aria-hidden") !== "true";
   }) || null;
 }
@@ -1284,6 +1420,7 @@ document.addEventListener("keydown", function (event) {
   if (event.key !== "Escape") return;
   event.preventDefault();
   if (topModal === elements.deleteModal) closeDeleteModal();
+  else if (topModal === elements.privacyConsentModal) deferPrivacyConsent();
   else if (topModal === elements.hitsModal) closeHitsModal();
   else if (topModal === elements.logModal) closeLogModal();
   else if (topModal === elements.ruleModal) requestCloseRuleModal();
@@ -1451,6 +1588,17 @@ chrome.storage.onChanged.addListener(function (changes, areaName) {
   if (changes[INTERCEPTION_ENABLED_KEY]) {
     interceptionEnabled = changes[INTERCEPTION_ENABLED_KEY].newValue !== false;
     updateInterceptionUi();
+  }
+
+  if (changes[PRIVACY_CONSENT_KEY]) {
+    privacyConsentGranted =
+      changes[PRIVACY_CONSENT_KEY].newValue === REQUIRED_PRIVACY_CONSENT_VERSION;
+    updateInterceptionUi();
+    if (privacyConsentGranted &&
+        elements.privacyConsentModal &&
+        !elements.privacyConsentModal.classList.contains("hidden")) {
+      closePrivacyConsentModal();
+    }
   }
 });
 
