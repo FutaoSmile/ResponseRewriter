@@ -60,6 +60,34 @@ First install initializes four disabled example rules plus four example logs, co
 
 ---
 
+## Screenshots
+
+<p align="center">
+  <img src="./images/规则列表.png" alt="Rule list" width="720">
+</p>
+
+**Rule list** — the manager's main screen: create / edit / delete rules, toggle them on or off, drag to reorder, and see hit counts at a glance.
+
+<p align="center">
+  <img src="./images/新增编辑规则.png" alt="Add / edit rule" width="720">
+</p>
+
+**Add / edit rule** — pick a URL match mode and a response processing mode, with the JSON edited right in the dialog.
+
+<p align="center">
+  <img src="./images/拦截详情.png" alt="Interception detail" width="720">
+</p>
+
+**Interception detail** — expand any hit to see an original → rewritten line-by-line diff with auto-formatted JSON.
+
+<p align="center">
+  <img src="./images/数据处理方式确认.png" alt="Data processing consent" width="720">
+</p>
+
+**Data processing consent** — before interception is enabled for the first time, the extension explains what it handles locally and asks for your consent.
+
+---
+
 ## Four response modes, pick what fits
 
 | Mode | What you write | What happens | Best for |

@@ -60,6 +60,34 @@ git clone https://github.com/FutaoSmile/ResponseRewriter.git
 
 ---
 
+## 界面预览
+
+<p align="center">
+  <img src="./images/规则列表.png" alt="规则列表" width="720">
+</p>
+
+**规则列表** — 管理页主界面：规则增删改查、启用/停用、拖拽排序、命中计数一屏搞定。
+
+<p align="center">
+  <img src="./images/新增编辑规则.png" alt="新增编辑规则" width="720">
+</p>
+
+**新增 / 编辑规则** — 选择 URL 匹配方式与响应处理模式，JSON 实时编辑。
+
+<p align="center">
+  <img src="./images/拦截详情.png" alt="拦截详情" width="720">
+</p>
+
+**拦截详情** — 每次命中都可展开为原始 → 改写的逐行差异对比，JSON 自动格式化去噪。
+
+<p align="center">
+  <img src="./images/数据处理方式确认.png" alt="数据处理方式确认" width="720">
+</p>
+
+**数据处理方式确认** — 首次启用拦截前明确说明本地处理的数据范围，征得同意后才安装拦截器。
+
+---
+
 ## 四种响应处理方式，按场景选
 
 | 方式 | 你写什么 | 效果 | 什么时候用 |
